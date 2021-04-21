@@ -33,7 +33,7 @@ class Config:
         # parse environment vars
         try:
             self.name = "quota_manager"
-            self.quota_params_path = os.environ["QUOTA_PARAMS_FILE_PATH"]
+            self.quota_params_path = "/app/quota_parameters.json"
             self.managed_project_label = os.environ["MANAGED_PROJECT_LABEL"]
         except KeyError as error:
             config_logger.critical("one of the environment variables is not defined: {}".format(error))
@@ -74,7 +74,7 @@ def apiRequest(method, uri, token):
 
 def validateRequest(request_args, args):
 
-    # abort request if not one of the args was not provided
+    # abort request if one of the args was not provided
     for arg in args:
         if arg not in request_args:
             logger.error("'{}' argument was not provided".format(arg))
@@ -104,12 +104,12 @@ def getProjects():
 # TODO
 @app.route("/quota", methods=["GET"])
 def getQuota():
-    return "", 500
+    raise NotImplementedError
 
 # TODO
 @app.route("/quota", methods=["PUT"])
 def setQuota():
-    return "", 500
+    raise NotImplementedError
 
 if __name__ == "__main__":
     app.run()
