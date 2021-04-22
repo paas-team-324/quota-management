@@ -5,6 +5,7 @@ import requests
 import logging
 import json
 import os
+import jsonschema
 from gevent.pywsgi import WSGIServer
 
 def getLogger(name):
