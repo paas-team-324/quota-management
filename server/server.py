@@ -33,19 +33,19 @@ class Config:
         # parse environment vars
         try:
             self.name = "quota_manager"
-            self.quota_params_path = "/app/quota_parameters.json"
-            self.managed_project_label = os.environ["MANAGED_PROJECT_LABEL"]
+            self.quota_scheme_path = os.environ["QUOTA_SCHEME_FILE"]
+            self.managed_project_label = os.environ["MANAGED_NAMESPACE_LABEL"]
         except KeyError as error:
             config_logger.critical("one of the environment variables is not defined: {}".format(error))
 
         # load quota parameters
         try:
-            with open(self.quota_params_path) as quota_params_file:
-                self.quota_params = json.loads(quota_params_file.read())
+            with open(self.quota_scheme_path) as quota_params_file:
+                self.quota_scheme = json.loads(quota_params_file.read())
         except FileNotFoundError:
-            config_logger.critical("quota parameters file not found at '{}'".format(self.quota_params_path))
+            config_logger.critical("quota scheme file not found at '{}'".format(self.quota_scheme_path))
         except json.JSONDecodeError as error:
-            config_logger.critical("could not parse quota parameters JSON file at '{}': {}".format(self.quota_params_path, error))
+            config_logger.critical("could not parse quota scheme JSON file at '{}': {}".format(self.quota_scheme_path, error))
 
 config = Config()
 logger = getLogger(config.name)
@@ -104,12 +104,12 @@ def getProjects():
 # TODO
 @app.route("/quota", methods=["GET"])
 def getQuota():
-    raise NotImplementedError
+    return "", 501
 
 # TODO
 @app.route("/quota", methods=["PUT"])
 def setQuota():
-    raise NotImplementedError
+    return "", 501
 
 if __name__ == "__main__":
     app.run()
