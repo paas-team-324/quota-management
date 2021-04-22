@@ -29,6 +29,7 @@ spec:
           mountPath: "/app/scheme.json"
           subPath: "scheme.json"
           readOnly: true
+        imagePullPolicy: Always
       volumes:
       - name: scheme
         configMap:

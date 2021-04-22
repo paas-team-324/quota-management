@@ -5,6 +5,7 @@ import requests
 import logging
 import json
 import os
+from gevent.pywsgi import WSGIServer
 
 def getLogger(name):
 
@@ -28,11 +29,11 @@ class Config:
     def __init__(self):
 
         # config loader logger
-        config_logger = getLogger("config_loader")
+        config_logger = getLogger("config-loader")
 
         # parse environment vars
         try:
-            self.name = "quota_manager"
+            self.name = "quota-manager"
             self.quota_scheme_path = os.environ["QUOTA_SCHEME_FILE"]
             self.managed_project_label = os.environ["MANAGED_NAMESPACE_LABEL"]
         except KeyError as error:
@@ -60,15 +61,15 @@ def apiRequest(method, uri, token):
         }, verify="/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
         response.raise_for_status()
 
-    # error during the request itself
-    except requests.RequestException as error:
-        logger.error(error)
-        flask.abort(500)
-
     # error received from the API
-    except requests.HTTPError as error:
+    except requests.exceptions.HTTPError as error:
         logger.warn(error)
         flask.abort(error.response.status_code)
+
+    # error during the request itself
+    except requests.exceptions.RequestException as error:
+        logger.error(error)
+        flask.abort(500)
 
     return response
 
@@ -112,4 +113,4 @@ def setQuota():
     return "", 501
 
 if __name__ == "__main__":
-    app.run()
+    WSGIServer(( "0.0.0.0", 5000 ), app, log=getLogger("api")).serve_forever()
