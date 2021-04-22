@@ -64,7 +64,7 @@ def apiRequest(method, uri, token):
 
     # error received from the API
     except requests.exceptions.HTTPError as error:
-        logger.warn(error)
+        logger.debug(error)
         flask.abort(error.response.status_code)
 
     # error during the request itself
