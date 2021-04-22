@@ -12,7 +12,7 @@ spec:
   template:
     metadata:
       labels:
-        app: server
+        app: quota-management-server
     spec:
       containers:
       - name: server
