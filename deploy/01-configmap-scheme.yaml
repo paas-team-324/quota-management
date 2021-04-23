@@ -4,4 +4,34 @@ metadata:
   name: quota-scheme
 data:
   scheme.json: |
-    {}
+    {
+        "compute": {
+            "pods": {
+                "name": "Pods",
+                "description": "The total number of pods in a non-terminal state that can exist in the project.",
+                "units": ""
+            },
+            "cpu": {
+                "name": "CPU Cores",
+                "description": "The sum of CPU requests across all pods in a non-terminal state cannot exceed this value.",
+                "units": ""
+            },
+            "memory": {
+                "name": "Memory",
+                "description": "The sum of memory requests across all pods in a non-terminal state cannot exceed this value.",
+                "units": "Gi"
+            }
+        },
+        "storage": {
+            "storage": {
+                "name": "Storage",
+                "description": "The sum of storage requests across all persistent volume claims in any state cannot exceed this value.",
+                "units": "Gi"
+            },
+            "persistentvolumeclaims": {
+                "name": "Persistent Volume Claims",
+                "description": "The total number of persistent volume claims that can exist in the project.",
+                "units": ""
+            }
+        }
+    }

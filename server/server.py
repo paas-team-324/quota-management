@@ -40,14 +40,48 @@ class Config:
         except KeyError as error:
             config_logger.critical("one of the environment variables is not defined: {}".format(error))
 
-        # load quota parameters
+        config_logger.info("all environment variables parsed successfully")
+
+        # load and validate quota scheme
         try:
-            with open(self.quota_scheme_path) as quota_params_file:
-                self.quota_scheme = json.loads(quota_params_file.read())
+            with open(self.quota_scheme_path) as quota_scheme_file:
+                self.quota_scheme = json.loads(quota_scheme_file.read())
+
+            # this is how a quota scheme should look like
+            schema = \
+            {
+                "type": "object",
+                "minProperties": 1,
+                "additionalProperties": False,
+                "patternProperties": {
+                    "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$": {
+                        "type": "object",
+                        "minProperties": 1,
+                        "additionalProperties": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "required": [ "name", "description", "units" ],
+                            "properties": {
+                                "name": { "type": "string" },
+                                "description": { "type": "string" },
+                                "units": { "type": "string" }
+                            }
+                        }
+                    }
+                }
+            }
+
+            # validate against schema
+            jsonschema.validate(instance=self.quota_scheme, schema=schema)
+
         except FileNotFoundError:
             config_logger.critical("quota scheme file not found at '{}'".format(self.quota_scheme_path))
         except json.JSONDecodeError as error:
             config_logger.critical("could not parse quota scheme JSON file at '{}': {}".format(self.quota_scheme_path, error))
+        except jsonschema.ValidationError as error:
+            config_logger.critical("quota scheme file does not conform to schema: {}".format(error))
+
+        config_logger.info("quota scheme validated")
 
 config = Config()
 logger = getLogger(config.name)
@@ -103,6 +137,10 @@ def getProjects():
     # return jsonified project names
     return flask.jsonify(getProjectList(flask.request.args["token"]))
 
+@app.route("/scheme", methods=["GET"])
+def getScheme():
+    return flask.jsonify(config.quota_scheme)
+
 # TODO
 @app.route("/quota", methods=["GET"])
 def getQuota():
@@ -114,4 +152,7 @@ def setQuota():
     return "", 501
 
 if __name__ == "__main__":
-    WSGIServer(( "0.0.0.0", 5000 ), app, log=getLogger("api")).serve_forever()
+    listener = ( "0.0.0.0", 5000 )
+    api_logger = getLogger("api")
+    api_logger.info("listening on {}:{}".format(listener[0], listener[1]))
+    WSGIServer(listener, app, log=api_logger).serve_forever()
