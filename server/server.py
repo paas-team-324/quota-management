@@ -6,6 +6,7 @@ import logging
 import json
 import os
 import jsonschema
+import re
 from gevent.pywsgi import WSGIServer
 
 def getLogger(name):
@@ -18,7 +19,7 @@ def getLogger(name):
 
     # set up handler with formatting
     logger = logging.getLogger(name)
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
     log_handler = ExitOnExceptionHandler()
     log_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
     logger.addHandler(log_handler)
@@ -40,7 +41,7 @@ class Config:
         except KeyError as error:
             config_logger.critical("one of the environment variables is not defined: {}".format(error))
 
-        config_logger.info("all environment variables parsed successfully")
+        config_logger.info("environment variables parsed")
 
         # load and validate quota scheme
         try:
@@ -60,11 +61,12 @@ class Config:
                         "additionalProperties": {
                             "type": "object",
                             "additionalProperties": False,
-                            "required": [ "name", "description", "units" ],
+                            "required": [ "name", "description", "units", "regex" ],
                             "properties": {
                                 "name": { "type": "string" },
                                 "description": { "type": "string" },
-                                "units": { "type": "string" }
+                                "units": { "type": "string" },
+                                "regex": { "type": "string" }
                             }
                         }
                     }
@@ -87,18 +89,21 @@ config = Config()
 logger = getLogger(config.name)
 app = flask.Flask(config.name)
 
-def apiRequest(method, uri, token):
+def apiRequest(method, uri, token, json=None):
 
     # make request
     try:
         response = requests.request(method, "https://kubernetes.default.svc" + uri, headers={
-            "Authorization": "Bearer {}".format(token)
-        }, verify="/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
+            "Authorization": "Bearer {}".format(token),
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Connection": "close"
+        }, verify="/var/run/secrets/kubernetes.io/serviceaccount/ca.crt", json=json)
         response.raise_for_status()
 
     # error received from the API
     except requests.exceptions.HTTPError as error:
-        logger.debug(error)
+        logger.debug("{}: {}".format(error, error.response.text))
         flask.abort(error.response.status_code)
 
     # error during the request itself
@@ -113,8 +118,10 @@ def validateRequest(request_args, args):
     # abort request if one of the args was not provided
     for arg in args:
         if arg not in request_args:
-            logger.error("'{}' argument was not provided".format(arg))
-            flask.abort(400)
+            logger.debug("'{}' argument was not provided".format(arg))
+            return False
+
+    return True
 
 def getProjectList(token):
 
@@ -132,7 +139,8 @@ def getProjectList(token):
 def getProjects():
 
     # validate arguments
-    validateRequest(flask.request.args, [ "token" ])
+    if not validateRequest(flask.request.args, [ "token" ]):
+        flask.abort(400)
 
     # return jsonified project names
     return flask.jsonify(getProjectList(flask.request.args["token"]))
@@ -146,10 +154,70 @@ def getScheme():
 def getQuota():
     return "", 501
 
-# TODO
 @app.route("/quota", methods=["PUT"])
 def setQuota():
-    return "", 501
+
+    # validate arguments
+    if not validateRequest(flask.request.args, [ "token", "project" ]):
+        flask.abort(400)
+
+    # get user quota scheme (throws 400 on error)
+    user_scheme = flask.request.get_json(force=True)
+
+    # make sure target namespace is managed
+    if flask.request.args["project"] not in getProjectList(flask.request.args["token"])["projects"]:
+        flask.abort(401)
+
+    quotas = []
+
+    try:
+        
+        # iterate quota objects
+        for quota_object_name in config.quota_scheme.keys():
+
+            parameters = {}
+
+            # iterate quota parameters
+            for quota_parameter_name in config.quota_scheme[quota_object_name].keys():
+
+                # store value
+                value = user_scheme[quota_object_name][quota_parameter_name]
+                regex = config.quota_scheme[quota_object_name][quota_parameter_name]["regex"]
+
+                # assert regex match and append units
+                assert bool(re.match(regex, value)), "value '{}' for parameter '{}' does not match regex '{}'".format(value, quota_parameter_name, regex)
+                parameters[quota_parameter_name] = "{}{}".format(value, config.quota_scheme[quota_object_name][quota_parameter_name]["units"])
+
+            # build new quota object
+            quotas.append({
+                "apiVersion": "v1",
+                "kind": "ResourceQuota",
+                "metadata": {
+                    "name": quota_object_name,
+                    "namespace": flask.request.args["project"]
+                },
+                "spec": {
+                    "hard": parameters
+                }
+            })
+
+    except KeyError as error:
+        logger.debug("key was not found in user provided scheme: {}".format(error))
+        flask.abort(400)
+
+    except (AssertionError, TypeError) as error:
+        logger.debug("user provided scheme is invalid: {}".format(error))
+        flask.abort(400)
+
+    # update each quota object separately
+    for quota in quotas:
+        logger.info("attempting to update the following quota: {}".format(quota))
+        apiRequest("PUT",
+                    "/api/v1/namespaces/{}/resourcequotas/{}".format(flask.request.args["project"], quota["metadata"]["name"]),
+                    flask.request.args["token"],
+                    json=quota)
+
+    return "", 200
 
 if __name__ == "__main__":
     listener = ( "0.0.0.0", 5000 )

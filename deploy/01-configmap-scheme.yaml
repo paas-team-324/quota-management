@@ -9,29 +9,34 @@ data:
             "pods": {
                 "name": "Pods",
                 "description": "The total number of pods in a non-terminal state that can exist in the project.",
-                "units": ""
+                "units": "",
+                "regex": "^\\d+$"
             },
             "cpu": {
                 "name": "CPU Cores",
                 "description": "The sum of CPU requests across all pods in a non-terminal state cannot exceed this value.",
-                "units": ""
+                "units": "",
+                "regex": "^\\d*\\.?\\d*$"
             },
             "memory": {
                 "name": "Memory",
                 "description": "The sum of memory requests across all pods in a non-terminal state cannot exceed this value.",
-                "units": "Gi"
+                "units": "Gi",
+                "regex": "^\\d*\\.?\\d*$"
             }
         },
         "storage": {
-            "storage": {
+            "requests.storage": {
                 "name": "Storage",
                 "description": "The sum of storage requests across all persistent volume claims in any state cannot exceed this value.",
-                "units": "Gi"
+                "units": "Gi",
+                "regex": "^\\d*\\.?\\d*$"
             },
             "persistentvolumeclaims": {
                 "name": "Persistent Volume Claims",
                 "description": "The total number of persistent volume claims that can exist in the project.",
-                "units": ""
+                "units": "",
+                "regex": "^\\d+$"
             }
         }
     }
