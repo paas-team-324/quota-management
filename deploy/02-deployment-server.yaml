@@ -23,11 +23,15 @@ spec:
           requests:
             memory: "64Mi"
             cpu: ".1"
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 5000
         env:
         - name: QUOTA_SCHEME_FILE
           value: "/app/scheme.json"
         - name: MANAGED_NAMESPACE_LABEL
-          value: "managed_quota=true"
+          value: "managed-quota=true"
         volumeMounts:
         - name: scheme
           mountPath: "/app/scheme.json"

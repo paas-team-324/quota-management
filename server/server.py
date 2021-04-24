@@ -145,6 +145,10 @@ def getProjects():
     # return jsonified project names
     return flask.jsonify(getProjectList(flask.request.args["token"]))
 
+@app.route("/healthz", methods=["GET"])
+def healthz():
+    return "OK", 200
+
 @app.route("/scheme", methods=["GET"])
 def getScheme():
     return flask.jsonify(config.quota_scheme)
