@@ -26,13 +26,13 @@ objects:
                   "units": "",
                   "regex": "^\\d+$"
               },
-              "cpu": {
+              "requests.cpu": {
                   "name": "CPU Cores",
                   "description": "The sum of CPU requests across all pods in a non-terminal state cannot exceed this value.",
                   "units": "",
                   "regex": "^\\d*\\.?\\d*$"
               },
-              "memory": {
+              "requests.memory": {
                   "name": "Memory",
                   "description": "The sum of memory requests across all pods in a non-terminal state cannot exceed this value.",
                   "units": "Gi",
