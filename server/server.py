@@ -104,7 +104,7 @@ def apiRequest(method, uri, token, json=None):
     # error received from the API
     except requests.exceptions.HTTPError as error:
         logger.debug("{}: {}".format(error, error.response.text))
-        flask.abort(error.response.status_code)
+        flask.abort(flask.make_response(error.response.json()["message"], error.response.status_code))
 
     # error during the request itself
     except requests.exceptions.RequestException as error:

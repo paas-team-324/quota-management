@@ -27,6 +27,7 @@ window.addEventListener('load', () => {
                 if (xhr.status == 200) {
                     window.USER.PROJECT_LIST = JSON.parse(xhr.responseText)["projects"]
                 } else {
+                    window.USER.PROJECT_LIST_ERROR = "Error: " + xhr.responseText
                     window.USER.PROJECT_LIST = false
                 }
             }
