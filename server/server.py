@@ -135,6 +135,11 @@ def getProjectList(token):
         "projects": [ namespace["metadata"]["name"] for namespace in response.json()["items"] ]
     }
 
+@app.after_request
+def after_request(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    return response
+
 @app.route("/projects", methods=["GET"])
 def getProjects():
 

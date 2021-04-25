@@ -1,5 +1,5 @@
 window.USER = {
-    PROJECT_LIST = null
+    PROJECT_LIST: null
 }
 
 window.addEventListener('load', () => {
