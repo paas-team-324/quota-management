@@ -104,12 +104,12 @@ def apiRequest(method, uri, token, json=None):
     # error received from the API
     except requests.exceptions.HTTPError as error:
         logger.debug("{}: {}".format(error, error.response.text))
-        flask.abort(flask.make_response(error.response.json()["message"], error.response.status_code))
+        flask.abort(flask.make_response(error.response.text, error.response.status_code))
 
     # error during the request itself
     except requests.exceptions.RequestException as error:
         logger.error(error)
-        flask.abort(500)
+        flask.abort(flask.make_response({ "message": error.strerror }, 500 ))
 
     return response
 
@@ -118,10 +118,9 @@ def validateRequest(request_args, args):
     # abort request if one of the args was not provided
     for arg in args:
         if arg not in request_args:
-            logger.debug("'{}' argument was not provided".format(arg))
-            return False
-
-    return True
+            message = "missing '{}' query parameter".format(arg)
+            logger.debug(message)
+            flask.abort(flask.make_response({ "message": message }, 400 ))
 
 def getProjectList(token):
 
@@ -144,8 +143,7 @@ def after_request(response):
 def getProjects():
 
     # validate arguments
-    if not validateRequest(flask.request.args, [ "token" ]):
-        flask.abort(400)
+    validateRequest(flask.request.args, [ "token" ])
 
     # return jsonified project names
     return flask.jsonify(getProjectList(flask.request.args["token"]))
@@ -167,15 +165,14 @@ def getQuota():
 def setQuota():
 
     # validate arguments
-    if not validateRequest(flask.request.args, [ "token", "project" ]):
-        flask.abort(400)
+    validateRequest(flask.request.args, [ "token", "project" ])
 
     # get user quota scheme (throws 400 on error)
     user_scheme = flask.request.get_json(force=True)
 
     # make sure target namespace is managed
     if flask.request.args["project"] not in getProjectList(flask.request.args["token"])["projects"]:
-        flask.abort(401)
+        flask.abort(flask.make_response({ "message": "project '{}' is not managed".format(flask.request.args["project"]) }, 401 ))
 
     quotas = []
 
@@ -211,12 +208,14 @@ def setQuota():
             })
 
     except KeyError as error:
-        logger.debug("key was not found in user provided scheme: {}".format(error))
-        flask.abort(400)
+        message = "key was not found in user provided scheme: {}".format(error)
+        logger.debug(message)
+        flask.abort(flask.make_response({ "message": message }, 400 ))
 
     except (AssertionError, TypeError) as error:
-        logger.debug("user provided scheme is invalid: {}".format(error))
-        flask.abort(400)
+        message = "user provided scheme is invalid: {}".format(error)
+        logger.debug(message)
+        flask.abort(flask.abort(flask.make_response({ "message": message }, 400 )))
 
     # update each quota object separately
     for quota in quotas:
