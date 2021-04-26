@@ -1,12 +1,16 @@
 import React from 'react';
 import './App.css';
-import { Container, Toolbar, AppBar, Typography, makeStyles } from '@material-ui/core';
+import Auth from './Auth';
+import { Container, Toolbar, AppBar, Typography, Box, makeStyles } from '@material-ui/core';
 
 class App extends React.Component {
   constructor () {
     super();
     this.state = {
-
+      token: null,
+      project_list: null,
+      scheme: null,
+      authenticated: false
     };
     
     // container styling
@@ -26,7 +30,18 @@ class App extends React.Component {
         padding: theme.spacing(3),
       },
     }));
+
+    this.finishAuthentication = this.finishAuthentication.bind(this)
   };
+
+  finishAuthentication(token, project_list, scheme) {
+    this.setState({
+      token: token,
+      project_list: project_list,
+      scheme: scheme,
+      authenticated: true
+    })
+  }
 
   render () {
     return (
@@ -38,6 +53,18 @@ class App extends React.Component {
             </Typography>
           </Toolbar>
         </AppBar>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginTop: '15%'
+        }}>
+          {this.state.authenticated ? (
+            <div>Very nice</div>
+          ) : (
+            <Auth token={this.state.token} project_list={this.state.project_list} scheme={this.state.scheme} finishAuthentication={this.finishAuthentication}></Auth>
+          )}
+        </div>
       </Container>
     )
   }
