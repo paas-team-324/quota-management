@@ -54,6 +54,13 @@ objects:
               }
           }
       }
+- apiVersion: v1
+  data:
+    users.json: |
+      [ "developer" ]
+  kind: ConfigMap
+  metadata:
+    name: quota-management-users
 - apiVersion: apps/v1
   kind: Deployment
   metadata:
@@ -123,6 +130,8 @@ objects:
           env:
           - name: QUOTA_SCHEME_FILE
             value: "/app/scheme.json"
+          - name: USERS_FILE
+            value: "/app/users.json"
           - name: MANAGED_NAMESPACE_LABEL
             value: "${MANAGED_NAMESPACE_LABEL}"
           volumeMounts:
@@ -130,11 +139,18 @@ objects:
             mountPath: "/app/scheme.json"
             subPath: "scheme.json"
             readOnly: true
+          - name: users
+            mountPath: "/app/users.json"
+            subPath: "users.json"
+            readOnly: true
           imagePullPolicy: Always
         volumes:
         - name: scheme
           configMap:
             name: quota-scheme
+        - name: users
+          configMap:
+            name: quota-management-users
 - apiVersion: v1
   kind: Service
   metadata:

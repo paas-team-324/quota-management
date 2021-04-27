@@ -37,6 +37,7 @@ class Config:
         try:
             self.name = "quota-manager"
             self.quota_scheme_path = os.environ["QUOTA_SCHEME_FILE"]
+            self.users_path = os.environ["USERS_FILE"]
             self.managed_project_label = os.environ["MANAGED_NAMESPACE_LABEL"]
         except KeyError as error:
             config_logger.critical("one of the environment variables is not defined: {}".format(error))
@@ -45,7 +46,7 @@ class Config:
 
         # load and validate quota scheme
         try:
-            with open(self.quota_scheme_path) as quota_scheme_file:
+            with open(self.quota_scheme_path, 'r') as quota_scheme_file:
                 self.quota_scheme = json.loads(quota_scheme_file.read())
 
             # this is how a quota scheme should look like
@@ -84,6 +85,33 @@ class Config:
             config_logger.critical("quota scheme file does not conform to schema: {}".format(error))
 
         config_logger.info("quota scheme validated")
+
+        # load quota management users
+        try:
+            with open(self.users_path, 'r') as users_file:
+                self.quota_users = json.loads(users_file.read())
+
+            # users JSON file is just an array of strings
+            schema = \
+            {
+                "type": "array",
+                "additionalItems": False,
+                "items": {
+                    "type": "string"
+                }
+            }
+
+            # validate against schema
+            jsonschema.validate(instance=self.quota_users, schema=schema)
+
+        except FileNotFoundError:
+            config_logger.critical("quota users file not found at '{}'".format(self.users_path))
+        except json.JSONDecodeError as error:
+            config_logger.critical("could not parse quota users JSON file at '{}': {}".format(self.users_path, error))
+        except jsonschema.ValidationError as error:
+            config_logger.critical("quota users file does not conform to schema: {}".format(error))
+
+        config_logger.info("quota management users file validated")
 
 config = Config()
 logger = getLogger(config.name)
