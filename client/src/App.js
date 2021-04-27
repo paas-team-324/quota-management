@@ -1,7 +1,8 @@
 import React from 'react';
 import './App.css';
 import Auth from './Auth';
-import { Container, Toolbar, AppBar, Typography, Box, makeStyles } from '@material-ui/core';
+import ResourceQuota from './ResourceQuota';
+import { Container, Toolbar, AppBar, Typography, Select, makeStyles } from '@material-ui/core';
 
 class App extends React.Component {
   constructor () {
@@ -10,7 +11,8 @@ class App extends React.Component {
       token: null,
       project_list: null,
       scheme: null,
-      authenticated: false
+      authenticated: false,
+      project: null
     };
     
     // container styling
@@ -39,7 +41,8 @@ class App extends React.Component {
       token: token,
       project_list: project_list,
       scheme: scheme,
-      authenticated: true
+      authenticated: true,
+      project: project_list[0]
     })
   }
 
@@ -60,8 +63,26 @@ class App extends React.Component {
           marginTop: '15%'
         }}>
           {this.state.authenticated ? (
-            <div>Very nice</div>
-          ) : (
+            <Container>
+              <Typography variant="h6" style={{ marginRight: "3px" }} gutterBottom>
+                Project: 
+                <Select
+                  native
+                  value={this.state.project}
+                  onChange={(event) => {
+                      this.setState({
+                          project: event.target.value
+                      })
+                  }}
+                >
+                  {this.state.project_list.map(project =>
+                      <option key={project} value={project}>{project}</option>)}
+                </Select>
+                </Typography>
+              {Object.keys(this.state.scheme).map(quota_object_name =>
+                  <ResourceQuota name={quota_object_name} fields={this.state.scheme[quota_object_name]}></ResourceQuota>)}
+            </Container>
+           ) : (
             <Auth token={this.state.token} project_list={this.state.project_list} scheme={this.state.scheme} finishAuthentication={this.finishAuthentication}></Auth>
           )}
         </div>
