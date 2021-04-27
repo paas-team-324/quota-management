@@ -33,6 +33,14 @@ class Config:
         # config loader logger
         config_logger = getLogger("config-loader")
 
+        # read pod token
+        pod_token_file_path = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        try:
+            with open(pod_token_file_path, 'r') as pod_token_file:
+                self.pod_token = pod_token_file.read()
+        except FileNotFoundError:
+            config_logger.critical("pod token file not found at '{}'".format(self.pod_token_file_path))
+
         # parse environment vars
         try:
             self.name = "quota-manager"
@@ -117,7 +125,7 @@ config = Config()
 logger = getLogger(config.name)
 app = flask.Flask(config.name)
 
-def apiRequest(method, uri, token, json=None):
+def apiRequest(method, uri, token=config.pod_token, json=None):
 
     # make request
     try:
@@ -141,7 +149,7 @@ def apiRequest(method, uri, token, json=None):
 
     return response
 
-def validateRequest(request_args, args):
+def validateParams(request_args, args):
 
     # abort request if one of the args was not provided
     for arg in args:
@@ -150,12 +158,27 @@ def validateRequest(request_args, args):
             logger.debug(message)
             flask.abort(flask.make_response({ "message": message }, 400 ))
 
-def getProjectList(token):
+def validateQuotaManager(username, project=None):
+
+    logger.debug(username)
+
+    # make sure user can manage quota
+    if username not in config.quota_users:
+        message = "user '{}' is not allowed to manage project quota".format(username)
+        logger.debug(message)
+        flask.abort(flask.make_response({ "message": message }, 401 ))
+
+    # make sure target namespace is managed
+    if project != None and project not in getProjectList()["projects"]:
+        message = "project '{}' is not managed".format(project)
+        logger.debug(message)
+        flask.abort(flask.make_response({ "message": message }, 401 ))
+
+def getProjectList():
 
     # query API
     response = apiRequest("GET",
-                          "/api/v1/namespaces?labelSelector={}".format(config.managed_project_label),
-                          token)
+                          "/api/v1/namespaces?labelSelector={}".format(config.managed_project_label))
 
     # return project names
     return {
@@ -167,14 +190,39 @@ def after_request(response):
     response.headers['Access-Control-Allow-Origin'] = '*'
     return response
 
+def getUsername(token):
+
+    # review user token
+    review_result = apiRequest( "POST",
+                                "/apis/authentication.k8s.io/v1/tokenreviews",
+                                json=\
+                                    {
+                                        "kind": "TokenReview",
+                                        "apiVersion": "authentication.k8s.io/v1",
+                                        "spec": {
+                                            "token": token
+                                        }
+                                    }).json()
+
+    # return username from review
+    try:
+        return review_result["status"]["user"]["username"]
+    except KeyError:
+        message = "invalid user token"
+        logger.debug(message)
+        flask.abort(flask.make_response({ "message": message }, 400 ))
+
 @app.route("/projects", methods=["GET"])
 def getProjects():
 
     # validate arguments
-    validateRequest(flask.request.args, [ "token" ])
+    validateParams(flask.request.args, [ "token" ])
+
+    # validate quota manager
+    validateQuotaManager(getUsername(flask.request.args["token"]))
 
     # return jsonified project names
-    return flask.jsonify(getProjectList(flask.request.args["token"]))
+    return flask.jsonify(getProjectList())
 
 @app.route("/healthz", methods=["GET"])
 def healthz():
@@ -193,35 +241,14 @@ def getQuota():
 def setQuota():
 
     # validate arguments
-    validateRequest(flask.request.args, [ "token", "project" ])
+    validateParams(flask.request.args, [ "token", "project" ])
+
+    # get username and validate
+    username = getUsername(flask.request.args["token"])
+    validateQuotaManager(username, project=flask.request.args["project"])
 
     # get user quota scheme (throws 400 on error)
     user_scheme = flask.request.get_json(force=True)
-
-    # get token owner's username
-    username = apiRequest("POST",
-                          "/apis/authentication.k8s.io/v1/tokenreviews",
-                          flask.request.args["token"],
-                          json=\
-                            {
-                                "kind": "TokenReview",
-                                "apiVersion": "authentication.k8s.io/v1",
-                                "spec": {
-                                    "token": flask.request.args["token"]
-                                }
-                            })["status"]["user"]["username"]
-
-    # make sure user can manage quota
-    if username not in config.quota_users:
-        message = "user '{}' is not allowed to manage project quota".format(flask.request.args["username"])
-        logger.debug(message)
-        flask.abort(flask.make_response({ "message": message }, 401 ))
-
-    # make sure target namespace is managed
-    if flask.request.args["project"] not in getProjectList(flask.request.args["token"])["projects"]:
-        message = "project '{}' is not managed".format(flask.request.args["project"])
-        logger.debug(message)
-        flask.abort(flask.make_response({ "message": message }, 401 ))
 
     quotas = []
 
@@ -268,10 +295,9 @@ def setQuota():
 
     # update each quota object separately
     for quota in quotas:
-        logger.info("attempting to update the following quota: {}".format(quota))
+        logger.info("user '{}' is attempting to update the following quota: {}".format(username, quota))
         apiRequest("PUT",
                     "/api/v1/namespaces/{}/resourcequotas/{}".format(flask.request.args["project"], quota["metadata"]["name"]),
-                    flask.request.args["token"],
                     json=quota)
 
     return flask.jsonify({ "message": "quota updated successfully for project '{}'".format(flask.request.args["project"]) }), 200

@@ -16,6 +16,7 @@ objects:
   kind: ConfigMap
   metadata:
     name: quota-scheme
+    namespace: ${NAMESPACE}
   data:
     scheme.json: |
       {
@@ -61,14 +62,40 @@ objects:
   kind: ConfigMap
   metadata:
     name: quota-management-users
+    namespace: ${NAMESPACE}
 - apiVersion: v1
   kind: ServiceAccount
   metadata:
     name: quota-manager
+    namespace: ${NAMESPACE}
+- apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRole
+  metadata:
+    name: quota-manager
+  rules:
+  - apiGroups:
+    - authentication.k8s.io
+    resources:
+    - tokenreviews
+    verbs:
+    - create
+- apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRoleBinding
+  metadata:
+    name: quota-manager
+  roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: ClusterRole
+    name: quota-manager
+  subjects:
+  - kind: ServiceAccount
+    name: quota-manager
+    namespace: ${NAMESPACE}
 - apiVersion: apps/v1
   kind: Deployment
   metadata:
     name: quota-management-client
+    namespace: ${NAMESPACE}
     labels:
       app: quota-management-client
   spec:
@@ -106,6 +133,7 @@ objects:
   kind: Deployment
   metadata:
     name: quota-management-server
+    namespace: ${NAMESPACE}
     labels:
       app: quota-management-server
   spec:
@@ -118,6 +146,7 @@ objects:
         labels:
           app: quota-management-server
       spec:
+        serviceAccountName: quota-manager
         containers:
         - name: server
           image: ${SERVER_IMAGE}
@@ -159,6 +188,7 @@ objects:
   kind: Service
   metadata:
     name: quota-management-client
+    namespace: ${NAMESPACE}
   spec:
     selector:
       app: quota-management-client
@@ -170,6 +200,7 @@ objects:
   kind: Service
   metadata:
     name: quota-management-server
+    namespace: ${NAMESPACE}
   spec:
     selector:
       app: quota-management-server
@@ -181,6 +212,7 @@ objects:
   apiVersion: route.openshift.io/v1
   metadata:
     name: quota-management-client
+    namespace: ${NAMESPACE}
   spec:
     host: quota-management.${ROUTER_CANONICAL_HOSTNAME}
     to:
@@ -197,6 +229,7 @@ objects:
   apiVersion: route.openshift.io/v1
   metadata:
     name: quota-management-server
+    namespace: ${NAMESPACE}
   spec:
     host: quota-management-server.${ROUTER_CANONICAL_HOSTNAME}
     to:
@@ -210,6 +243,9 @@ objects:
       insecureEdgeTerminationPolicy: Redirect
     wildcardPolicy: None
 parameters:
+- description: Namespace in which to deploy the quota management
+  name: NAMESPACE
+  required: true
 - description: Client ID for the UI to use
   value: quota-management
   name: CLIENT_ID
