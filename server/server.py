@@ -125,6 +125,10 @@ config = Config()
 logger = getLogger(config.name)
 app = flask.Flask(config.name)
 
+def abort(message, code):
+    logger.debug(message)
+    flask.abort(flask.make_response({ "message": message }, code ))
+
 def apiRequest(method, uri, token=config.pod_token, json=None):
 
     # make request
@@ -139,13 +143,12 @@ def apiRequest(method, uri, token=config.pod_token, json=None):
 
     # error received from the API
     except requests.exceptions.HTTPError as error:
-        logger.debug("{}: {}".format(error, error.response.text))
-        flask.abort(flask.make_response(error.response.text, error.response.status_code))
+        abort(error.response.text, error.response.status_code)
 
     # error during the request itself
     except requests.exceptions.RequestException as error:
         logger.error(error)
-        flask.abort(flask.make_response({ "message": error.strerror }, 500 ))
+        abort(error.strerror, 500)
 
     return response
 
@@ -154,23 +157,17 @@ def validateParams(request_args, args):
     # abort request if one of the args was not provided
     for arg in args:
         if arg not in request_args:
-            message = "missing '{}' query parameter".format(arg)
-            logger.debug(message)
-            flask.abort(flask.make_response({ "message": message }, 400 ))
+            abort("missing '{}' query parameter".format(arg), 400)
 
 def validateQuotaManager(username, project=None):
 
     # make sure user can manage quota
     if username not in config.quota_users:
-        message = "user '{}' is not allowed to manage project quota".format(username)
-        logger.debug(message)
-        flask.abort(flask.make_response({ "message": message }, 401 ))
+        abort("user '{}' is not allowed to manage project quota".format(username), 401)
 
     # make sure target namespace is managed
     if project != None and project not in getProjectList()["projects"]:
-        message = "project '{}' is not managed".format(project)
-        logger.debug(message)
-        flask.abort(flask.make_response({ "message": message }, 401 ))
+        abort("project '{}' is not managed".format(project), 400)
 
 def getProjectList():
 
@@ -206,9 +203,7 @@ def getUsername(token):
     try:
         return review_result["status"]["user"]["username"]
     except KeyError:
-        message = "invalid user token"
-        logger.debug(message)
-        flask.abort(flask.make_response({ "message": message }, 400 ))
+        abort("invalid user token", 400)
 
 @app.route("/projects", methods=["GET"])
 def getProjects():
@@ -282,14 +277,10 @@ def setQuota():
             })
 
     except KeyError as error:
-        message = "key was not found in user provided scheme: {}".format(error)
-        logger.debug(message)
-        flask.abort(flask.make_response({ "message": message }, 400 ))
+        abort("key was not found in user provided scheme: {}".format(error), 400)
 
     except (AssertionError, TypeError) as error:
-        message = "user provided scheme is invalid: {}".format(error)
-        logger.debug(message)
-        flask.abort(flask.abort(flask.make_response({ "message": message }, 400 )))
+        abort("user provided scheme is invalid: {}".format(error), 400)
 
     # update each quota object separately
     for quota in quotas:
