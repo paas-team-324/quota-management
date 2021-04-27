@@ -1,6 +1,5 @@
 import React from 'react';
 import { Typography } from '@material-ui/core';
-import CircularProgress from '@material-ui/core/CircularProgress';
 
 class Auth extends React.Component {
 
@@ -134,7 +133,6 @@ class Auth extends React.Component {
 
         return (
             <div>
-                <CircularProgress />
                 <Typography variant="subtitle2" color='textSecondary'>
                     {this.state.message}
                 </Typography>
