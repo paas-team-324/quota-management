@@ -1,5 +1,6 @@
 import React from 'react';
 import { Typography } from '@material-ui/core';
+import { Alert, AlertTitle } from '@material-ui/lab';
 
 class Auth extends React.Component {
 
@@ -123,11 +124,10 @@ class Auth extends React.Component {
 
         if (this.state.error == true) {
             return (
-                <Typography color="error">
-                    <div>
-                        Error: {this.state.message}
-                    </div>
-                </Typography>
+                <Alert severity="error">
+                    <AlertTitle>Error</AlertTitle>
+                    {this.state.message}
+                </Alert>
             )
         }
 
