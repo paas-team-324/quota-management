@@ -160,8 +160,6 @@ def validateParams(request_args, args):
 
 def validateQuotaManager(username, project=None):
 
-    logger.debug(username)
-
     # make sure user can manage quota
     if username not in config.quota_users:
         message = "user '{}' is not allowed to manage project quota".format(username)
