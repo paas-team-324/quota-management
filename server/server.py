@@ -198,9 +198,30 @@ def setQuota():
     # get user quota scheme (throws 400 on error)
     user_scheme = flask.request.get_json(force=True)
 
+    # get token owner's username
+    username = apiRequest("POST",
+                          "/apis/authentication.k8s.io/v1/tokenreviews",
+                          flask.request.args["token"],
+                          json=\
+                            {
+                                "kind": "TokenReview",
+                                "apiVersion": "authentication.k8s.io/v1",
+                                "spec": {
+                                    "token": flask.request.args["token"]
+                                }
+                            })["status"]["user"]["username"]
+
+    # make sure user can manage quota
+    if username not in config.quota_users:
+        message = "user '{}' is not allowed to manage project quota".format(flask.request.args["username"])
+        logger.debug(message)
+        flask.abort(flask.make_response({ "message": message }, 401 ))
+
     # make sure target namespace is managed
     if flask.request.args["project"] not in getProjectList(flask.request.args["token"])["projects"]:
-        flask.abort(flask.make_response({ "message": "project '{}' is not managed".format(flask.request.args["project"]) }, 401 ))
+        message = "project '{}' is not managed".format(flask.request.args["project"])
+        logger.debug(message)
+        flask.abort(flask.make_response({ "message": message }, 401 ))
 
     quotas = []
 
@@ -253,7 +274,7 @@ def setQuota():
                     flask.request.args["token"],
                     json=quota)
 
-    return "", 200
+    return flask.jsonify({ "message": "quota updated successfully for project '{}'".format(flask.request.args["project"]) }), 200
 
 if __name__ == "__main__":
     listener = ( "0.0.0.0", 5000 )

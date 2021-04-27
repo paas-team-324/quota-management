@@ -61,6 +61,10 @@ objects:
   kind: ConfigMap
   metadata:
     name: quota-management-users
+- apiVersion: v1
+  kind: ServiceAccount
+  metadata:
+    name: quota-manager
 - apiVersion: apps/v1
   kind: Deployment
   metadata:
