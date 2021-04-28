@@ -75,7 +75,8 @@ class Config:
                                 "name": { "type": "string" },
                                 "description": { "type": "string" },
                                 "units": { "type": "string" },
-                                "regex": { "type": "string" }
+                                "regex": { "type": "string" },
+                                "regex_description": { "type": "string" }
                             }
                         }
                     }
@@ -143,7 +144,7 @@ def apiRequest(method, uri, token=config.pod_token, json=None):
 
     # error received from the API
     except requests.exceptions.HTTPError as error:
-        abort(error.response.text, error.response.status_code)
+        abort(error.response.json()['message'], error.response.status_code)
 
     # error during the request itself
     except requests.exceptions.RequestException as error:
@@ -183,6 +184,7 @@ def getProjectList():
 @app.after_request
 def after_request(response):
     response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, PUT'
     return response
 
 def getUsername(token):
