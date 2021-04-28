@@ -285,10 +285,10 @@ def setQuota():
 
     # update each quota object separately
     for quota in quotas:
-        logger.info("user '{}' is attempting to update the following quota: {}".format(username, quota))
         apiRequest("PUT",
                     "/api/v1/namespaces/{}/resourcequotas/{}".format(flask.request.args["project"], quota["metadata"]["name"]),
                     json=quota)
+        logger.info("user '{}' has updated the following quota: {}".format(username, quota))
 
     return flask.jsonify({ "message": "quota updated successfully for project '{}'".format(flask.request.args["project"]) }), 200
 
