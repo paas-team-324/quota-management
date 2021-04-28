@@ -1,4 +1,4 @@
-FROM docker.io/library/python:3
+FROM docker.io/library/python:3.9-slim
 
 # general
 EXPOSE 5000

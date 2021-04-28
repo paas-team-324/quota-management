@@ -2,7 +2,7 @@ import React from 'react';
 import './App.css';
 import Auth from './Auth';
 import ResourceQuota from './ResourceQuota';
-import { Container, Toolbar, AppBar, Typography, Select, Button } from '@material-ui/core';
+import { Container, Toolbar, AppBar, Typography, Select, Button, Grid } from '@material-ui/core';
 import { Alert } from '@material-ui/lab';
 
 class App extends React.Component {
@@ -144,35 +144,46 @@ class App extends React.Component {
                       	<Container style={{
 							justifyContent: 'center',
 						  }}>
-							<Typography variant="h6" style={{ marginRight: "7px" }} gutterBottom>
-								Project: 
-								<Select
-									native
-									value={this.state.project}
-									onChange={(event) => {
-										this.setState({
-											project: event.target.value
-										})
-									}}>
-									{this.state.project_list.map(project =>
-										<option key={project} value={project}>{project}</option>
-									)}
-								</Select>
-							</Typography>
-                        	{Object.keys(this.state.scheme).map(quota_object_name =>
-                            	<ResourceQuota name={quota_object_name} fields={this.state.scheme[quota_object_name]} edit={this.edit}></ResourceQuota>)}
-							<Button
-								size="small"
-								variant="contained"
-								color="primary"
-								component="span"
-								disabled={!this.state.output_valid || this.state.updating}
-								onClick={() => this.update()}>
-								{this.state.update_button_text}
-							</Button>
+							<Grid container spacing={3}>
+								<Grid item xs={10}>
+									<Typography gutterBottom>
+										<span style={{ marginRight: "7px" }}>Project:</span>
+										<Select
+											native
+											value={this.state.project}
+											onChange={(event) => {
+												this.setState({
+													project: event.target.value
+												})
+											}}>
+											{this.state.project_list.map(project =>
+												<option key={project} value={project}>{project}</option>
+											)}
+										</Select>
+									</Typography>
+								</Grid>
+								<Grid item xs={2}>
+									<Button
+										size="small"
+										variant="contained"
+										color="primary"
+										component="span"
+										disabled={!this.state.output_valid || this.state.updating}
+										fullWidth
+										onClick={() => this.update()}>
+										{this.state.update_button_text}
+									</Button>
+								</Grid>
+								{Object.keys(this.state.scheme).map(quota_object_name =>
+									<Grid item xs={12 / Object.keys(this.state.scheme).length}>
+										<ResourceQuota name={quota_object_name} fields={this.state.scheme[quota_object_name]} edit={this.edit}></ResourceQuota>
+									</Grid>)}
 							{this.state.alerts.map(alert => 
-								<Alert style={{ marginTop: "5px" }} severity={alert["severity"]} onClose={() => {this.closeAlert(alert)}}>{alert["message"]}</Alert>
-							)}
+								<Grid item xs={12}>
+									<Alert severity={alert["severity"]} onClose={() => {this.closeAlert(alert)}}>{alert["message"]}</Alert>
+							  	</Grid>
+								)}
+							</Grid>
                       	</Container>
                     ) : (
                       	<Auth token={this.state.token} project_list={this.state.project_list} scheme={this.state.scheme} finishAuthentication={this.finishAuthentication}></Auth>

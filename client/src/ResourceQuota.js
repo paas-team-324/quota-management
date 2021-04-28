@@ -1,5 +1,5 @@
 import React from 'react';
-import { TextField } from '@material-ui/core';
+import { TextField, Tooltip } from '@material-ui/core';
 
 class QuotaParameter extends React.Component {
 
@@ -8,7 +8,6 @@ class QuotaParameter extends React.Component {
 
         this.state = {
             name: this.props.parameter["name"],
-            description: this.props.parameter["description"],
             units: (this.props.parameter["units"] === '' ? '' : '(' + this.props.parameter["units"] + ')'),
             regex: new RegExp(this.props.parameter["regex"]),
             regex_description: this.props.parameter["regex_description"],
@@ -86,7 +85,7 @@ class ResourceQuota extends React.Component {
         return (
             <div>
                 {Object.keys(this.props.fields).map(parameter_name =>
-                    <div>
+                    <div style={{ marginTop: "10px" }}>
                         <QuotaParameter parameter_name={parameter_name} parameter={this.props.fields[parameter_name]} edit={this.edit}></QuotaParameter>
                     </div>
                 )}

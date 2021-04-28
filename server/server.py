@@ -70,10 +70,9 @@ class Config:
                         "additionalProperties": {
                             "type": "object",
                             "additionalProperties": False,
-                            "required": [ "name", "description", "units", "regex" ],
+                            "required": [ "name", "units", "regex", "regex_description" ],
                             "properties": {
                                 "name": { "type": "string" },
-                                "description": { "type": "string" },
                                 "units": { "type": "string" },
                                 "regex": { "type": "string" },
                                 "regex_description": { "type": "string" }
