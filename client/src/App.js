@@ -145,7 +145,7 @@ class App extends React.Component {
 							justifyContent: 'center',
 						  }}>
 							<Grid container spacing={3}>
-								<Grid item xs={10}>
+								<Grid item xs={9}>
 									<Typography gutterBottom>
 										<span style={{ marginRight: "7px" }}>Project:</span>
 										<Select
@@ -162,7 +162,7 @@ class App extends React.Component {
 										</Select>
 									</Typography>
 								</Grid>
-								<Grid item xs={2}>
+								<Grid item xs={3}>
 									<Button
 										size="small"
 										variant="contained"
