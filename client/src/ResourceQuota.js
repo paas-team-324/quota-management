@@ -12,14 +12,14 @@ class QuotaParameter extends React.Component {
             regex: new RegExp(this.props.parameter["regex"]),
             regex_description: this.props.parameter["regex_description"],
 
-            value: this.props.parameter[""]
+            value: ""
         };
 
         this.validate = this.validate.bind(this)
     };
 
     validate(event) {
-
+ 
         // test input with regex
         if (event.target.value === '' || this.state.regex.test(event.target.value)) {
 
