@@ -12,6 +12,11 @@ objects:
     name: ${CLIENT_ID}
   redirectURIs:
   - https://quota-management.${ROUTER_CANONICAL_HOSTNAME}
+- apiVersion: user.openshift.io/v1
+  kind: Group
+  metadata:
+    name: ${QUOTA_MANAGERS_GROUP}
+  users: []
 - apiVersion: v1
   kind: ConfigMap
   metadata:
@@ -56,14 +61,6 @@ objects:
           }
       }
 - apiVersion: v1
-  data:
-    users.json: |
-      [ "developer" ]
-  kind: ConfigMap
-  metadata:
-    name: quota-management-users
-    namespace: ${NAMESPACE}
-- apiVersion: v1
   kind: ServiceAccount
   metadata:
     name: quota-manager
@@ -91,6 +88,14 @@ objects:
     - resourcequotas
     verbs:
     - update
+  - apiGroups:
+    - user.openshift.io
+    resources:
+    - groups
+    resourceNames:
+    - ${QUOTA_MANAGERS_GROUP}
+    verbs:
+    - get
 - apiVersion: rbac.authorization.k8s.io/v1
   kind: ClusterRoleBinding
   metadata:
@@ -175,18 +180,14 @@ objects:
           env:
           - name: QUOTA_SCHEME_FILE
             value: "/app/scheme.json"
-          - name: USERS_FILE
-            value: "/app/users.json"
           - name: MANAGED_NAMESPACE_LABEL
             value: "${MANAGED_NAMESPACE_LABEL}"
+          - name: QUOTA_MANAGERS_GROUP
+            value: "${QUOTA_MANAGERS_GROUP}"
           volumeMounts:
           - name: scheme
             mountPath: "/app/scheme.json"
             subPath: "scheme.json"
-            readOnly: true
-          - name: users
-            mountPath: "/app/users.json"
-            subPath: "users.json"
             readOnly: true
           imagePullPolicy: Always
         volumes:
@@ -261,6 +262,10 @@ parameters:
 - description: Client ID for the UI to use
   value: quota-management
   name: CLIENT_ID
+  required: true
+- description: Name for the quota managers group
+  value: quota-managers
+  name: QUOTA_MANAGERS_GROUP
   required: true
 - description: Endpoint to use for authentication
   name: OAUTH_ENDPOINT

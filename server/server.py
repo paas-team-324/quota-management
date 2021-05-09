@@ -45,8 +45,8 @@ class Config:
         try:
             self.name = "quota-manager"
             self.quota_scheme_path = os.environ["QUOTA_SCHEME_FILE"]
-            self.users_path = os.environ["USERS_FILE"]
             self.managed_project_label = os.environ["MANAGED_NAMESPACE_LABEL"]
+            self.quota_managers_group = os.environ["QUOTA_MANAGERS_GROUP"]
         except KeyError as error:
             config_logger.critical("one of the environment variables is not defined: {}".format(error))
 
@@ -94,33 +94,6 @@ class Config:
 
         config_logger.info("quota scheme validated")
 
-        # load quota management users
-        try:
-            with open(self.users_path, 'r') as users_file:
-                self.quota_users = json.loads(users_file.read())
-
-            # users JSON file is just an array of strings
-            schema = \
-            {
-                "type": "array",
-                "additionalItems": False,
-                "items": {
-                    "type": "string"
-                }
-            }
-
-            # validate against schema
-            jsonschema.validate(instance=self.quota_users, schema=schema)
-
-        except FileNotFoundError:
-            config_logger.critical("quota users file not found at '{}'".format(self.users_path))
-        except json.JSONDecodeError as error:
-            config_logger.critical("could not parse quota users JSON file at '{}': {}".format(self.users_path, error))
-        except jsonschema.ValidationError as error:
-            config_logger.critical("quota users file does not conform to schema: {}".format(error))
-
-        config_logger.info("quota management users file validated")
-
 config = Config()
 logger = getLogger(config.name)
 app = flask.Flask(config.name)
@@ -161,8 +134,12 @@ def validateParams(request_args, args):
 
 def validateQuotaManager(username, project=None):
 
+    # fetch list of quota managers
+    managers_list = apiRequest( "GET",
+                                "/apis/user.openshift.io/v1/groups/{}".format(config.quota_managers_group)).json()["users"]
+
     # make sure user can manage quota
-    if username not in config.quota_users:
+    if type(managers_list) != list or username not in managers_list:
         abort("user '{}' is not allowed to manage project quota".format(username), 401)
 
     # make sure target namespace is managed
