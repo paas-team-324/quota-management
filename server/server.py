@@ -7,6 +7,7 @@ import json
 import os
 import jsonschema
 import re
+from kubernetes.utils.quantity import parse_quantity
 from gevent.pywsgi import WSGIServer
 
 def getLogger(name):
@@ -203,10 +204,44 @@ def healthz():
 def getScheme():
     return flask.jsonify(config.quota_scheme)
 
-# TODO
 @app.route("/quota", methods=["GET"])
 def getQuota():
-    return "", 501
+
+    # validate arguments
+    validateParams(flask.request.args, [ "token", "project" ])
+
+    # get username and validate
+    username = getUsername(flask.request.args["token"])
+    validateQuotaManager(username, project=flask.request.args["project"])
+
+    # prepare project quota JSON to be returned
+    project_quota = {}
+
+    # iterate quota objects
+    for quota_object_name in config.quota_scheme.keys():
+
+        project_quota[quota_object_name] = {}
+
+        # fetch quota object from project
+        quota_object = apiRequest(  "GET",
+                                    "/api/v1/namespaces/{}/resourcequotas/{}".format(flask.request.args["project"], quota_object_name)).json()
+
+        # iterate quota parameters
+        for quota_parameter_name in config.quota_scheme[quota_object_name].keys():
+
+            # get current value
+            try:
+                value_decimal = parse_quantity(quota_object["spec"]["hard"][quota_parameter_name])
+            except KeyError:
+                abort("quota parameter '{}' is not defined in '{}' resource quota in project '{}'".format(quota_parameter_name, quota_object_name, flask.request.args["project"]), 500)
+
+            # convert to desired units
+            value_decimal /= parse_quantity("1{}".format(config.quota_scheme[quota_object_name][quota_parameter_name]["units"]))
+
+            # strip trailing zeroes and set in return JSON
+            project_quota[quota_object_name][quota_parameter_name] = str(value_decimal.normalize())
+
+    return flask.jsonify(project_quota), 200
 
 @app.route("/quota", methods=["PUT"])
 def setQuota():
