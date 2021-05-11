@@ -158,10 +158,21 @@ def getProjectList():
         "projects": [ namespace["metadata"]["name"] for namespace in response.json()["items"] ]
     }
 
+@app.before_request
+def validateUser():
+
+    # validate arguments
+    validateParams(flask.request.args, [ "token" ])
+
+    # validate quota manager and optional project
+    username = getUsername(flask.request.args["token"])
+    project = flask.request.args["project"] if "project" in flask.request.args else None
+    validateQuotaManager(username, project=project)
+
 @app.after_request
 def after_request(response):
     response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Access-Control-Allow-Methods'] = 'GET, PUT'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, PUT, POST'
     return response
 
 def getUsername(token):
@@ -187,14 +198,13 @@ def getUsername(token):
 @app.route("/projects", methods=["GET"])
 def getProjects():
 
-    # validate arguments
-    validateParams(flask.request.args, [ "token" ])
-
-    # validate quota manager
-    validateQuotaManager(getUsername(flask.request.args["token"]))
-
     # return jsonified project names
     return flask.jsonify(getProjectList())
+
+# TODO
+@app.route("/projects", methods=["POST"])
+def createProject():
+    return "", 501
 
 @app.route("/healthz", methods=["GET"])
 def healthz():
@@ -208,11 +218,7 @@ def getScheme():
 def getQuota():
 
     # validate arguments
-    validateParams(flask.request.args, [ "token", "project" ])
-
-    # get username and validate
-    username = getUsername(flask.request.args["token"])
-    validateQuotaManager(username, project=flask.request.args["project"])
+    validateParams(flask.request.args, [ "project" ])
 
     # prepare project quota JSON to be returned
     project_quota = {}
@@ -247,11 +253,10 @@ def getQuota():
 def setQuota():
 
     # validate arguments
-    validateParams(flask.request.args, [ "token", "project" ])
+    validateParams(flask.request.args, [ "project" ])
 
-    # get username and validate
+    # get username
     username = getUsername(flask.request.args["token"])
-    validateQuotaManager(username, project=flask.request.args["project"])
 
     # get user quota scheme (throws 400 on error)
     user_scheme = flask.request.get_json(force=True)

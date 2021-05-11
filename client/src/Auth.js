@@ -32,13 +32,13 @@ class Auth extends React.Component {
             })
 
             // prepare URL params
-            let xhr_projects_params = new URLSearchParams({
+            let xhr_token_param = new URLSearchParams({
                 token: urlParams.get('access_token')
             })
 
             // prepare API request for projects
             let xhr_projects = new XMLHttpRequest()
-            xhr_projects.open('GET', window.ENV.BACKEND_ROUTE + "/projects?" + xhr_projects_params.toString())
+            xhr_projects.open('GET', window.ENV.BACKEND_ROUTE + "/projects?" + xhr_token_param.toString())
 
             // API response callback
             xhr_projects.onreadystatechange = function () {
@@ -65,7 +65,7 @@ class Auth extends React.Component {
 
                             // prepare API request for quota projects
                             let xhr_scheme = new XMLHttpRequest()
-                            xhr_scheme.open('GET', window.ENV.BACKEND_ROUTE + "/scheme")
+                            xhr_scheme.open('GET', window.ENV.BACKEND_ROUTE + "/scheme?" + xhr_token_param.toString())
 
                             // API response callback
                             xhr_scheme.onreadystatechange = function () {
