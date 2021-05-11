@@ -74,7 +74,7 @@ class Config:
                             "required": [ "name", "units", "regex", "regex_description" ],
                             "properties": {
                                 "name": { "type": "string" },
-                                "units": { "type": "string" },
+                                "units": { "type": "string", "pattern": "^(|Ki|Mi|Gi|Ti|Pi|Ei|n|u|m|k|M|G|T|P|E)$" },
                                 "regex": { "type": "string" },
                                 "regex_description": { "type": "string" }
                             }
