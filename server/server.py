@@ -98,6 +98,7 @@ class Config:
 config = Config()
 logger = getLogger(config.name)
 app = flask.Flask(config.name)
+public_routes = []
 
 def abort(message, code):
     logger.debug(message)
@@ -159,7 +160,11 @@ def getProjectList():
     }
 
 @app.before_request
-def validateUser():
+def check_authorization():
+
+    # do not check public routes
+    if flask.request.endpoint in public_routes:
+        return
 
     # validate arguments
     validateParams(flask.request.args, [ "token" ])
@@ -174,6 +179,10 @@ def after_request(response):
     response.headers['Access-Control-Allow-Origin'] = '*'
     response.headers['Access-Control-Allow-Methods'] = 'GET, PUT, POST'
     return response
+
+def authorization_not_required(route):
+    public_routes.append(route.__name__)
+    return route
 
 def getUsername(token):
 
@@ -207,6 +216,7 @@ def createProject():
     return "", 501
 
 @app.route("/healthz", methods=["GET"])
+@authorization_not_required
 def healthz():
     return "OK", 200
 
