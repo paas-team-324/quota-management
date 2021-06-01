@@ -55,7 +55,7 @@ class App extends React.Component {
 		})
 
 		// if more than three alerts - remove the oldest one
-		if (alerts.length > 3) {
+		if (alerts.length > 5) {
 			alerts.shift()
 		}
 
@@ -104,7 +104,7 @@ class App extends React.Component {
 						{this.state.authenticated ? (
 							
 							<TabContext value={this.state.tab}>
-								<Paper square>
+								<Paper square elevation={2}>
 									<TabList
 										indicatorColor="primary"
 										textColor="primary"
@@ -118,7 +118,7 @@ class App extends React.Component {
 										<Tab label="Update Quota" icon={<EditIcon />} value={0}/>
 									</TabList>
 								</Paper>
-								<Paper square style={{ marginTop: '1%' }}>
+								<Paper square elevation={2} style={{ marginTop: '1%' }}>
 									<TabPanel value={0}>
 										<UpdateQuota request={this.request} addAlert={this.addAlert}></UpdateQuota>
 									</TabPanel>

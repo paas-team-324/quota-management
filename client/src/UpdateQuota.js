@@ -12,13 +12,15 @@ class UpdateQuota extends React.Component {
         super(props);
 
         this.state = {
-            loading: true,
-            error: null,
+            init_loading: true,
+            init_error: null,
+            project_loading: true,
+            project_error: null,
             scheme: null,
             quota: {},
             current_quota: null,
             filled: true,
-            project_list: null,
+            project_list: [],
             project: null,
             update_button_text: update_button_idle,
             updating: false,
@@ -31,7 +33,9 @@ class UpdateQuota extends React.Component {
     changeProject(project) {
 
         this.setState({
-            loading: true
+            project: project,
+            project_loading: true,
+            project_error: null
         })
 
         // get current quota values
@@ -42,18 +46,16 @@ class UpdateQuota extends React.Component {
             if (ok) {
 
                 this.setState({
-                    project: project,
                     current_quota: responseJSON,
                     quota: responseJSON,
-                    loading: false
+                    project_loading: false
                 })
 
             } else {
 
-                this.props.addAlert(JSON.parse(response)["message"], "error")
-
                 this.setState({
-                    loading: false
+                    project_loading: false,
+                    project_error: JSON.parse(response)["message"]
                 })
 
             }
@@ -85,14 +87,15 @@ class UpdateQuota extends React.Component {
                         if (responseJSON["projects"].length == 0) {
 
                             this.setState({
-                                error: "there are no managed projects that exist in this cluster"
+                                init_error: "there are no managed projects that exist in this cluster"
                             })
                             
                         } else {
 
                             // store list in state, then change to first project in list
                             this.setState({
-                                project_list: responseJSON["projects"]
+                                project_list: responseJSON["projects"],
+                                init_loading: false
                             }, function() {
                                 this.changeProject(this.state.project_list[0])
                             })
@@ -101,7 +104,7 @@ class UpdateQuota extends React.Component {
 
                     } else {
                         this.setState({
-                            error: responseJSON["message"]
+                            init_error: responseJSON["message"]
                         })
                     }
 
@@ -109,7 +112,7 @@ class UpdateQuota extends React.Component {
 
             } else {
                 this.setState({
-                    error: responseJSON["message"]
+                    init_error: responseJSON["message"]
                 })
             }
 
@@ -143,9 +146,9 @@ class UpdateQuota extends React.Component {
     render() {
         return (
             <div>
-                {this.state.error == null ? (
+                {this.state.init_error == null ? (
                     <div>
-                        {this.state.loading ? (
+                        {this.state.init_loading ? (
                             <div style={{display: 'flex', justifyContent:'center', alignItems:'center'}}>
                                 <CircularProgress />
                             </div>
@@ -172,25 +175,46 @@ class UpdateQuota extends React.Component {
                                             variant="contained"
                                             color="primary"
                                             component="span"
-                                            disabled={!this.state.filled || this.state.updating}
+                                            disabled={!this.state.filled || this.state.updating || this.state.project_loading}
                                             fullWidth
                                             onClick={() => this.update()}>
                                             {this.state.update_button_text}
                                         </Button>
                                     </Grid>
-                                    <Quota scheme={this.state.scheme} handleChange={(quota, filled) => {
-                                        this.setState({
-                                                quota: quota,
-                                                filled: filled
-                                        })
-                                    }} current={this.state.current_quota}></Quota>
+                                    {this.state.project_error == null ? (
+
+                                            this.state.project_loading ? (
+
+                                                <div style={{display: 'flex', justifyContent:'center', alignItems:'center'}}>
+                                                    <CircularProgress />
+                                                </div>
+
+                                            ) : (
+
+                                                <Quota scheme={this.state.scheme} handleChange={(quota, filled) => {
+                                                    this.setState({
+                                                            quota: quota,
+                                                            filled: filled
+                                                    })
+                                                }} current={this.state.current_quota}></Quota>
+
+                                            )
+
+                                    ) : (
+                                        <Grid item xs={12}>
+                                            <Alert severity="error">
+                                                <AlertTitle>Error</AlertTitle>
+                                                {this.state.project_error}
+                                            </Alert>
+                                        </Grid>
+                                    )}
                                 </Grid>
                             )}
                     </div>
                 ) : (
                     <Alert severity="error">
                         <AlertTitle>Error</AlertTitle>
-                        {this.state.error}
+                        {this.state.init_error}
                     </Alert>
                 )}
             </div>

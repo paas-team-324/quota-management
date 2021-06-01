@@ -43,6 +43,7 @@ class QuotaParameter extends React.Component {
                 helperText={this.state.regex_description}
                 value={this.state.value}
                 onChange={event => this.validate(event)}
+                style={{ marginTop: '4%' }}
                 fullWidth
             />
         )
@@ -56,7 +57,7 @@ class ResourceQuota extends React.Component {
         super(props);
 
         this.state = {
-            quota: {}
+            quota: JSON.parse(JSON.stringify(this.props.current))
         };
 
         this.edit = this.edit.bind(this)
@@ -87,8 +88,7 @@ class ResourceQuota extends React.Component {
                 parameter_name={parameter_name}
                 parameter={this.props.fields[parameter_name]}
                 edit={this.edit}
-                current={this.props.current[parameter_name]}
-                style={{ marginTop: '4%' }}></QuotaParameter>
+                current={this.props.current[parameter_name]}></QuotaParameter>
         )
         
     }
@@ -101,8 +101,8 @@ class Quota extends React.Component {
         super(props);
 
         this.state = {
-            quota: {},
-            filled: false
+            quota: JSON.parse(JSON.stringify(this.props.current)),
+            filled: true
         };
 
         this.edit = this.edit.bind(this)
