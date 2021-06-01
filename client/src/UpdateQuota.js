@@ -175,7 +175,7 @@ class UpdateQuota extends React.Component {
                                             variant="contained"
                                             color="primary"
                                             component="span"
-                                            disabled={!this.state.filled || this.state.updating || this.state.project_loading}
+                                            disabled={!this.state.filled || this.state.updating || this.state.project_loading || this.state.project_error != null}
                                             fullWidth
                                             onClick={() => this.update()}>
                                             {this.state.update_button_text}
@@ -185,9 +185,11 @@ class UpdateQuota extends React.Component {
 
                                             this.state.project_loading ? (
 
-                                                <div style={{display: 'flex', justifyContent:'center', alignItems:'center'}}>
-                                                    <CircularProgress />
-                                                </div>
+                                                <Grid item xs={12}>
+                                                    <div style={{display: 'flex', justifyContent:'center', alignItems:'center'}}>
+                                                        <CircularProgress />
+                                                    </div>
+                                                </Grid>
 
                                             ) : (
 
