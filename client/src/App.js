@@ -1,111 +1,69 @@
 import React from 'react';
 import './App.css';
 import Auth from './Auth';
-import ResourceQuota from './ResourceQuota';
-import { Container, Toolbar, AppBar, Typography, Select, Button, Grid } from '@material-ui/core';
-import { Alert } from '@material-ui/lab';
+import UpdateQuota from './UpdateQuota';
+import { Container, Toolbar, AppBar, Typography, Grid, Paper, Tab } from '@material-ui/core';
+import { Alert, TabContext, TabPanel, TabList } from '@material-ui/lab';
+import EditIcon from '@material-ui/icons/Edit';
+import AddIcon from '@material-ui/icons/Add';
 
 class App extends React.Component {
     constructor () {
         super();
 
         this.state = {
+			authenticated: false,
             token: null,
-            project_list: null,
-            scheme: null,
-            authenticated: false,
-            project: null,
-            scheme: {},
-			output: {},
-            output_valid: false,
-			updating: false,
-			update_button_text: "",
-			update_button_text_available: "Update Quota",
-			update_button_text_working: "Updating...",
-
+			tab: 0,
 			alerts: []
         };
 
-        this.finishAuthentication = this.finishAuthentication.bind(this)
-        this.edit = this.edit.bind(this)
-        this.update = this.update.bind(this)
+		this.request = this.request.bind(this)
+		this.addAlert = this.addAlert.bind(this)
 		this.closeAlert = this.closeAlert.bind(this)
     };
 
-    finishAuthentication(token, project_list, scheme) {
-        this.setState({
-            token: token,
-            project_list: project_list,
-            scheme: scheme,
-            authenticated: true,
-            project: project_list[0],
-			update_button_text: this.state.update_button_text_available
-        })
-    }
+	request(method, uri, query_params, data, callback) {
 
-    edit(name, value) {
+		// add auth token to query params
+		query_params["token"] = this.state.token
 
-        let output = this.state.output
-
-		// if not all keys are set - remove from final output
-        if (Object.keys(value).length === Object.keys(this.state.scheme[name]).length) {
-            output[name] = value
-        } else {
-            delete output[name]
-        }
-
-        this.setState({
-            output: output,
-            output_valid: (Object.keys(output).length === Object.keys(this.state.scheme).length ? true : false)
-        })
-
-    }
-
-    update() {
-
-		this.setState({
-			update_button_text: this.state.update_button_text_working,
-			updating: true
-		})
-
-		// prepare URL params
-		let xhr_update_params = new URLSearchParams({
-			token: this.state.token,
-			project: this.state.project
-		})
-
-		// prepare quota update request
-        let xhr_update = new XMLHttpRequest()
-		xhr_update.open('PUT', window.ENV.BACKEND_ROUTE + "/quota?" + xhr_update_params.toString())
+		// prepare xhr request
+		let xhr_request = new XMLHttpRequest()
+		xhr_request.open(method, window.ENV.BACKEND_ROUTE + uri + "?" + new URLSearchParams(query_params).toString())
 
 		// API response callback
-		xhr_update.onreadystatechange = function () {
-			if (xhr_update.readyState == XMLHttpRequest.DONE) {
+		xhr_request.onreadystatechange = function() {
 
-				let alerts = this.state.alerts
-
-				// push new alerts to alerts list
-				alerts.push({
-					"message": JSON.parse(xhr_update.responseText)["message"],
-					"severity": (xhr_update.status == 200 ? "success" : "error")
-				})
-
-				// if more than three alerts - remove the oldest one
-				if (alerts.length > 3) {
-					alerts.shift()
-				}
-
-				this.setState({
-					alerts: alerts,
-					update_button_text: this.state.update_button_text_available,
-					updating: false
-				})
-
+			if (xhr_request.readyState == XMLHttpRequest.DONE) {
+				callback(xhr_request.responseText, (Math.floor(xhr_request.status / 100) == 2) )
 			}
+
 		}.bind(this)
 
-		xhr_update.send(JSON.stringify(this.state.output))
-    }
+		xhr_request.send(JSON.stringify(data))
+	}
+
+	addAlert(message, severity) {
+
+		let alerts = this.state.alerts
+
+		// push new alerts to alerts list
+		alerts.push({
+			"message": message,
+			"severity": severity
+		})
+
+		// if more than three alerts - remove the oldest one
+		if (alerts.length > 5) {
+			alerts.shift()
+		}
+
+		this.setState({
+			alerts: alerts,
+		})
+
+	}
 
 	closeAlert(alert) {
 
@@ -140,54 +98,48 @@ class App extends React.Component {
                     justifyContent: 'center',
                     marginTop: '15%'
                 }}>
-                    {this.state.authenticated ? (
-                      	<Container style={{
-							justifyContent: 'center',
-						  }}>
-							<Grid container spacing={3}>
-								<Grid item xs={9}>
-									<Typography gutterBottom>
-										<span style={{ marginRight: "7px" }}>Project:</span>
-										<Select
-											native
-											value={this.state.project}
-											onChange={(event) => {
-												this.setState({
-													project: event.target.value
-												})
-											}}>
-											{this.state.project_list.map(project =>
-												<option key={project} value={project}>{project}</option>
-											)}
-										</Select>
-									</Typography>
-								</Grid>
-								<Grid item xs={3}>
-									<Button
-										size="small"
-										variant="contained"
-										color="primary"
-										component="span"
-										disabled={!this.state.output_valid || this.state.updating}
-										fullWidth
-										onClick={() => this.update()}>
-										{this.state.update_button_text}
-									</Button>
-								</Grid>
-								{Object.keys(this.state.scheme).map(quota_object_name =>
-									<Grid item xs={12 / Object.keys(this.state.scheme).length}>
-										<ResourceQuota name={quota_object_name} fields={this.state.scheme[quota_object_name]} edit={this.edit}></ResourceQuota>
-									</Grid>)}
-							{this.state.alerts.map(alert => 
-								<Grid item xs={12}>
-									<Alert severity={alert["severity"]} onClose={() => {this.closeAlert(alert)}}>{alert["message"]}</Alert>
-							  	</Grid>
-								)}
+					<Container style={{
+						justifyContent: 'center',
+					}}>
+						{this.state.authenticated ? (
+							
+							<TabContext value={this.state.tab}>
+								<Paper square elevation={2}>
+									<TabList
+										indicatorColor="primary"
+										textColor="primary"
+										variant="fullWidth"
+										onChange={(event, newValue) => {
+											this.setState({
+												tab: newValue
+											})
+										}}
+									>
+										<Tab label="Update Quota" icon={<EditIcon />} value={0}/>
+									</TabList>
+								</Paper>
+								<Paper square elevation={2} style={{ marginTop: '1%' }}>
+									<TabPanel value={0}>
+										<UpdateQuota request={this.request} addAlert={this.addAlert}></UpdateQuota>
+									</TabPanel>
+								</Paper>
+							</TabContext>
+
+						) : (
+							<Auth finishAuthentication={(token) => {
+								this.setState({
+									authenticated: true,
+									token: token
+								})
+							}}></Auth>
+						)}
+
+						{this.state.alerts.map(alert => 
+							<Grid item xs={12}>
+								<Alert style={{ marginTop: '1%' }} severity={alert["severity"]} onClose={() => {this.closeAlert(alert)}}>{alert["message"]}</Alert>
 							</Grid>
-                      	</Container>
-                    ) : (
-                      	<Auth token={this.state.token} project_list={this.state.project_list} scheme={this.state.scheme} finishAuthentication={this.finishAuthentication}></Auth>
-                    )}
+						)}
+					</Container>
                 </div>
             </Container>
         )

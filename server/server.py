@@ -7,6 +7,7 @@ import json
 import os
 import jsonschema
 import re
+from kubernetes.utils.quantity import parse_quantity
 from gevent.pywsgi import WSGIServer
 
 def getLogger(name):
@@ -73,7 +74,7 @@ class Config:
                             "required": [ "name", "units", "regex", "regex_description" ],
                             "properties": {
                                 "name": { "type": "string" },
-                                "units": { "type": "string" },
+                                "units": { "type": "string", "pattern": "^(|Ki|Mi|Gi|Ti|Pi|Ei|n|u|m|k|M|G|T|P|E)$" },
                                 "regex": { "type": "string" },
                                 "regex_description": { "type": "string" }
                             }
@@ -97,6 +98,7 @@ class Config:
 config = Config()
 logger = getLogger(config.name)
 app = flask.Flask(config.name)
+public_routes = []
 
 def abort(message, code):
     logger.debug(message)
@@ -157,11 +159,30 @@ def getProjectList():
         "projects": [ namespace["metadata"]["name"] for namespace in response.json()["items"] ]
     }
 
+@app.before_request
+def check_authorization():
+
+    # do not check public routes
+    if flask.request.endpoint in public_routes:
+        return
+
+    # validate arguments
+    validateParams(flask.request.args, [ "token" ])
+
+    # validate quota manager and optional project
+    username = getUsername(flask.request.args["token"])
+    project = flask.request.args["project"] if "project" in flask.request.args else None
+    validateQuotaManager(username, project=project)
+
 @app.after_request
 def after_request(response):
     response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Access-Control-Allow-Methods'] = 'GET, PUT'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, PUT, POST'
     return response
+
+def authorization_not_required(route):
+    public_routes.append(route.__name__)
+    return route
 
 def getUsername(token):
 
@@ -186,16 +207,16 @@ def getUsername(token):
 @app.route("/projects", methods=["GET"])
 def getProjects():
 
-    # validate arguments
-    validateParams(flask.request.args, [ "token" ])
-
-    # validate quota manager
-    validateQuotaManager(getUsername(flask.request.args["token"]))
-
     # return jsonified project names
     return flask.jsonify(getProjectList())
 
+# TODO
+@app.route("/projects", methods=["POST"])
+def createProject():
+    return "", 501
+
 @app.route("/healthz", methods=["GET"])
+@authorization_not_required
 def healthz():
     return "OK", 200
 
@@ -203,20 +224,49 @@ def healthz():
 def getScheme():
     return flask.jsonify(config.quota_scheme)
 
-# TODO
 @app.route("/quota", methods=["GET"])
 def getQuota():
-    return "", 501
+
+    # validate arguments
+    validateParams(flask.request.args, [ "project" ])
+
+    # prepare project quota JSON to be returned
+    project_quota = {}
+
+    # iterate quota objects
+    for quota_object_name in config.quota_scheme.keys():
+
+        project_quota[quota_object_name] = {}
+
+        # fetch quota object from project
+        quota_object = apiRequest(  "GET",
+                                    "/api/v1/namespaces/{}/resourcequotas/{}".format(flask.request.args["project"], quota_object_name)).json()
+
+        # iterate quota parameters
+        for quota_parameter_name in config.quota_scheme[quota_object_name].keys():
+
+            # get current value
+            try:
+                value_decimal = parse_quantity(quota_object["spec"]["hard"][quota_parameter_name])
+            except KeyError:
+                abort("quota parameter '{}' is not defined in '{}' resource quota in project '{}'".format(quota_parameter_name, quota_object_name, flask.request.args["project"]), 500)
+
+            # convert to desired units
+            value_decimal /= parse_quantity("1{}".format(config.quota_scheme[quota_object_name][quota_parameter_name]["units"]))
+
+            # strip trailing zeroes and set in return JSON
+            project_quota[quota_object_name][quota_parameter_name] = str(value_decimal.normalize())
+
+    return flask.jsonify(project_quota), 200
 
 @app.route("/quota", methods=["PUT"])
 def setQuota():
 
     # validate arguments
-    validateParams(flask.request.args, [ "token", "project" ])
+    validateParams(flask.request.args, [ "project" ])
 
-    # get username and validate
+    # get username
     username = getUsername(flask.request.args["token"])
-    validateQuotaManager(username, project=flask.request.args["project"])
 
     # get user quota scheme (throws 400 on error)
     user_scheme = flask.request.get_json(force=True)
