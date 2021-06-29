@@ -104,13 +104,13 @@ def abort(message, code):
     logger.debug(message)
     flask.abort(flask.make_response({ "message": message }, code ))
 
-def apiRequest(method, uri, token=config.pod_token, json=None):
+def apiRequest(method, uri, token=config.pod_token, json=None, contentType="application/json"):
 
     # make request
     try:
         response = requests.request(method, "https://kubernetes.default.svc" + uri, headers={
             "Authorization": "Bearer {}".format(token),
-            "Content-Type": "application/json",
+            "Content-Type": contentType,
             "Accept": "application/json",
             "Connection": "close"
         }, verify="/var/run/secrets/kubernetes.io/serviceaccount/ca.crt", json=json)
@@ -271,7 +271,7 @@ def setQuota():
     # get user quota scheme (throws 400 on error)
     user_scheme = flask.request.get_json(force=True)
 
-    quotas = []
+    patches = []
 
     try:
         
@@ -291,16 +291,13 @@ def setQuota():
                 assert bool(re.match(regex, value)), "value '{}' for parameter '{}' does not match regex '{}'".format(value, quota_parameter_name, regex)
                 parameters[quota_parameter_name] = "{}{}".format(value, config.quota_scheme[quota_object_name][quota_parameter_name]["units"])
 
-            # build new quota object
-            quotas.append({
-                "apiVersion": "v1",
-                "kind": "ResourceQuota",
-                "metadata": {
-                    "name": quota_object_name,
-                    "namespace": flask.request.args["project"]
-                },
-                "spec": {
-                    "hard": parameters
+            # build new patch object
+            patches.append({
+                "name": quota_object_name,
+                "data": {
+                    "spec": {
+                        "hard": parameters
+                    }
                 }
             })
 
@@ -311,11 +308,12 @@ def setQuota():
         abort("user provided scheme is invalid: {}".format(error), 400)
 
     # update each quota object separately
-    for quota in quotas:
-        apiRequest("PUT",
-                    "/api/v1/namespaces/{}/resourcequotas/{}".format(flask.request.args["project"], quota["metadata"]["name"]),
-                    json=quota)
-        logger.info("user '{}' has updated the following quota: {}".format(username, quota))
+    for patch in patches:
+        apiRequest( "PATCH",
+                    "/api/v1/namespaces/{}/resourcequotas/{}".format(flask.request.args["project"], patch["name"]),
+                    json=patch["data"],
+                    contentType="application/strategic-merge-patch+json")
+        logger.info("user '{}' has updated the following quota: {}".format(username, patch))
 
     return flask.jsonify({ "message": "quota updated successfully for project '{}'".format(flask.request.args["project"]) }), 200
 
