@@ -204,6 +204,10 @@ def getUsername(token):
     except KeyError:
         abort("invalid user token", 400)
 
+@app.route("/username", methods=["GET"])
+def getUsernameRoute():
+    return getUsername(flask.request.args["token"]), 200
+
 @app.route("/projects", methods=["GET"])
 def getProjects():
 

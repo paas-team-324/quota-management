@@ -14,6 +14,7 @@ class App extends React.Component {
         this.state = {
 			authenticated: false,
             token: null,
+			username: null,
 			tab: 0,
 			alerts: []
         };
@@ -86,10 +87,17 @@ class App extends React.Component {
         return (
             <Container maxWidth="md">
                 <AppBar color="primary">
-                    <Toolbar style={{display: "grid"}}>
-                        <Typography variant="h6" align="center">
-                            Quota Management
-                        </Typography>
+                    <Toolbar>
+						<Grid item xs={5}>
+							<Typography variant="subtitle1">
+								{ this.state.username }
+							</Typography>
+						</Grid>
+						<Grid item xs={2}>
+							<Typography variant="h6" align="center">
+								Quota Management
+							</Typography>
+						</Grid>
                     </Toolbar>
                 </AppBar>
                 <div style={{
@@ -126,9 +134,10 @@ class App extends React.Component {
 							</TabContext>
 
 						) : (
-							<Auth finishAuthentication={(token) => {
+							<Auth finishAuthentication={(token, username) => {
 								this.setState({
 									authenticated: true,
+									username: username,
 									token: token
 								})
 							}}></Auth>
