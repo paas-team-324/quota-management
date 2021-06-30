@@ -205,7 +205,9 @@ def getUsername(token):
         abort("invalid user token", 400)
 
 @app.route("/username", methods=["GET"])
+@authorization_not_required
 def getUsernameRoute():
+    validateParams(flask.request.args, [ "token" ])
     return getUsername(flask.request.args["token"]), 200
 
 @app.route("/projects", methods=["GET"])
