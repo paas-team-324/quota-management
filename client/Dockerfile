@@ -5,7 +5,7 @@ RUN npm install
 COPY . .
 RUN npm run build
 
-FROM docker.io/nginxinc/nginx-unprivileged:1.20-alpine
+FROM docker.io/nginxinc/nginx-unprivileged:1.20
 WORKDIR /app
 COPY --from=build /app/build /usr/share/nginx/html
 COPY --from=build /app/app .

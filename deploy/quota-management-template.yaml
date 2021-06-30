@@ -279,10 +279,10 @@ parameters:
   name: ROUTER_CANONICAL_HOSTNAME
   required: true
 - description: Docker image to use for the UI
-  value: docker.io/vladpbr/quota-management-client:1.2
+  value: docker.io/vladpbr/quota-management-client:1.1
   name: CLIENT_IMAGE
   required: true
 - description: Docker image to use for the backend
-  value: docker.io/vladpbr/quota-management-server:1.2
+  value: docker.io/vladpbr/quota-management-server:1.1
   name: SERVER_IMAGE
   required: true
