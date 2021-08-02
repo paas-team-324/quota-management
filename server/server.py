@@ -58,6 +58,9 @@ class Config:
             with open(self.quota_scheme_path, 'r') as quota_scheme_file:
                 self.quota_scheme = json.loads(quota_scheme_file.read())
 
+            # list of valid quantity units
+            valid_units = [ "", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "n", "u", "m", "k", "M", "G", "T", "P", "E" ]
+
             # this is how a quota scheme should look like
             schema = \
             {
@@ -74,7 +77,19 @@ class Config:
                             "required": [ "name", "units", "regex", "regex_description" ],
                             "properties": {
                                 "name": { "type": "string" },
-                                "units": { "type": "string", "pattern": "^(|Ki|Mi|Gi|Ti|Pi|Ei|n|u|m|k|M|G|T|P|E)$" },
+                                "units": {
+                                    "anyOf": [
+                                        {
+                                            "enum": valid_units
+                                        },
+                                        {
+                                            "type": "array",
+                                            "minItems": 2,
+                                            "uniqueItems": True,
+                                            "items": { "enum": valid_units }
+                                        }
+                                    ]
+                                },
                                 "regex": { "type": "string" },
                                 "regex_description": { "type": "string" }
                             }
@@ -257,8 +272,12 @@ def getQuota():
             except KeyError:
                 abort("quota parameter '{}' is not defined in '{}' resource quota in project '{}'".format(quota_parameter_name, quota_object_name, flask.request.args["project"]), 500)
 
-            # convert to desired units
-            value_decimal /= parse_quantity("1{}".format(config.quota_scheme[quota_object_name][quota_parameter_name]["units"]))
+            # get desired units
+            config_units = config.quota_scheme[quota_object_name][quota_parameter_name]["units"]
+            units = config_units[0] if isinstance(config_units, list) else config_units
+
+            # convert to desired quantity based on units
+            value_decimal /= parse_quantity("1{}".format(units))
 
             # strip trailing zeroes, format as float and set in return JSON
             project_quota[quota_object_name][quota_parameter_name] = '{:f}'.format(value_decimal.normalize())
@@ -289,13 +308,21 @@ def setQuota():
             # iterate quota parameters
             for quota_parameter_name in config.quota_scheme[quota_object_name].keys():
 
-                # store value
-                value = user_scheme[quota_object_name][quota_parameter_name]
+                # store value and units
+                value = user_scheme[quota_object_name][quota_parameter_name]["value"]
+                units = user_scheme[quota_object_name][quota_parameter_name]["units"]
                 regex = config.quota_scheme[quota_object_name][quota_parameter_name]["regex"]
+                config_units = config.quota_scheme[quota_object_name][quota_parameter_name]["units"]
 
-                # assert regex match and append units
+                # assert value regex match
                 assert bool(re.match(regex, value)), "value '{}' for parameter '{}' does not match regex '{}'".format(value, quota_parameter_name, regex)
-                parameters[quota_parameter_name] = "{}{}".format(value, config.quota_scheme[quota_object_name][quota_parameter_name]["units"])
+
+                # assert units are valid
+                valid_units = config_units if isinstance(config_units, list) else [ config_units ]
+                assert units in valid_units, "units '{}' for parameter '{}' are not one of the following: '{}'".format(units, quota_parameter_name, valid_units)
+
+                # append parameter
+                parameters[quota_parameter_name] = "{}{}".format(value, units)
 
             # build new patch object
             patches.append({
