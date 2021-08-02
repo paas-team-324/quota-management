@@ -280,7 +280,10 @@ def getQuota():
             value_decimal /= parse_quantity("1{}".format(units))
 
             # strip trailing zeroes, format as float and set in return JSON
-            project_quota[quota_object_name][quota_parameter_name] = '{:f}'.format(value_decimal.normalize())
+            project_quota[quota_object_name][quota_parameter_name] = {
+                "value": '{:f}'.format(value_decimal.normalize()),
+                "units": units
+            }
 
     return flask.jsonify(project_quota), 200
 
