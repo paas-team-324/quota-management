@@ -69,7 +69,7 @@ class Auth extends React.Component {
     render() {
 
         return (
-            <div>
+            <div style={{ textAlign: "center" }}>
                 <Typography variant="subtitle2" color='textSecondary'>
                     Authenticating...
                 </Typography>
