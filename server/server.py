@@ -27,8 +27,107 @@ def getLogger(name):
 
     return logger
 
+class Schemas:
+
+        # list of valid quantity units
+        _valid_units = [ "", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "n", "u", "m", "k", "M", "G", "T", "P", "E" ]
+
+        # this is how a quota scheme should look like
+        scheme_file = \
+        {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": False,
+            "patternProperties": {
+                "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$": {
+                    "type": "object",
+                    "minProperties": 1,
+                    "additionalProperties": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "required": [ "name", "units", "regex", "regex_description" ],
+                        "properties": {
+                            "name": { "type": "string" },
+                            "units": {
+                                "anyOf": [
+                                    {
+                                        "enum": _valid_units
+                                    },
+                                    {
+                                        "type": "array",
+                                        "minItems": 2,
+                                        "uniqueItems": True,
+                                        "items": { "enum": _valid_units }
+                                    }
+                                ]
+                            },
+                            "regex": { "type": "string" },
+                            "regex_description": { "type": "string" }
+                        }
+                    }
+                }
+            }
+        }
+
+        def __init__(self, quota):
+
+            # schema logger
+            schema_logger = getLogger("schema")
+
+            try:
+
+                # validate against schema
+                jsonschema.validate(instance=quota, schema=self.scheme_file)
+
+            except jsonschema.ValidationError as error:
+                schema_logger.critical("quota scheme file does not conform to schema: {}".format(error))
+
+            schema_logger.info("quota scheme validated")
+
+            # generate quota schema based on input
+            self.quota = \
+            {
+                "type": "object",
+                "additionalProperties": False,
+                "required": [],
+                "properties": {}
+            }
+
+            # iterate quota objects
+            for quota_object_name in quota.keys():
+
+                # set current quota object as required, forbid any other keys
+                self.quota["required"].append(quota_object_name)
+                self.quota["properties"][quota_object_name] = \
+                {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": [],
+                    "properties": {},
+                }
+
+                # iterate quota parameters
+                for quota_parameter_name in quota[quota_object_name].keys():
+
+                    valid_units = quota[quota_object_name][quota_parameter_name]["units"]
+
+                    # set current 'hard' quota parameter as required, forbid any other keys
+                    self.quota["properties"][quota_object_name]["required"].append(quota_parameter_name)
+                    self.quota["properties"][quota_object_name]["properties"][quota_parameter_name] = \
+                    {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "required": [ "value", "units" ],
+                        "properties": {
+                            "value": { "type": "string", "pattern": quota[quota_object_name][quota_parameter_name]["regex"] },
+                            "units": { "type": "string", "enum": valid_units if isinstance(valid_units, list) else [ valid_units ] }
+                        }
+                    }
+
+            schema_logger.info("user quota scheme generated")
+
 class Config:
-    
+
     def __init__(self):
 
         # config loader logger
@@ -53,62 +152,18 @@ class Config:
 
         config_logger.info("environment variables parsed")
 
-        # load and validate quota scheme
+        # load quota scheme
         try:
             with open(self.quota_scheme_path, 'r') as quota_scheme_file:
                 self.quota_scheme = json.loads(quota_scheme_file.read())
-
-            # list of valid quantity units
-            valid_units = [ "", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "n", "u", "m", "k", "M", "G", "T", "P", "E" ]
-
-            # this is how a quota scheme should look like
-            schema = \
-            {
-                "type": "object",
-                "minProperties": 1,
-                "additionalProperties": False,
-                "patternProperties": {
-                    "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$": {
-                        "type": "object",
-                        "minProperties": 1,
-                        "additionalProperties": {
-                            "type": "object",
-                            "additionalProperties": False,
-                            "required": [ "name", "units", "regex", "regex_description" ],
-                            "properties": {
-                                "name": { "type": "string" },
-                                "units": {
-                                    "anyOf": [
-                                        {
-                                            "enum": valid_units
-                                        },
-                                        {
-                                            "type": "array",
-                                            "minItems": 2,
-                                            "uniqueItems": True,
-                                            "items": { "enum": valid_units }
-                                        }
-                                    ]
-                                },
-                                "regex": { "type": "string" },
-                                "regex_description": { "type": "string" }
-                            }
-                        }
-                    }
-                }
-            }
-
-            # validate against schema
-            jsonschema.validate(instance=self.quota_scheme, schema=schema)
 
         except FileNotFoundError:
             config_logger.critical("quota scheme file not found at '{}'".format(self.quota_scheme_path))
         except json.JSONDecodeError as error:
             config_logger.critical("could not parse quota scheme JSON file at '{}': {}".format(self.quota_scheme_path, error))
-        except jsonschema.ValidationError as error:
-            config_logger.critical("quota scheme file does not conform to schema: {}".format(error))
 
-        config_logger.info("quota scheme validated")
+        # generate schemas object
+        self.schemas = Schemas(self.quota_scheme)
 
 config = Config()
 logger = getLogger(config.name)
@@ -299,50 +354,34 @@ def setQuota():
     # get user quota scheme (throws 400 on error)
     user_scheme = flask.request.get_json(force=True)
 
-    patches = []
-
+    # validate user quota scheme
     try:
-        
-        # iterate quota objects
-        for quota_object_name in config.quota_scheme.keys():
-
-            parameters = {}
-
-            # iterate quota parameters
-            for quota_parameter_name in config.quota_scheme[quota_object_name].keys():
-
-                valid_units = config.quota_scheme[quota_object_name][quota_parameter_name]["units"]
-
-                # validate against schema of current parameter
-                jsonschema.validate(instance=user_scheme[quota_object_name][quota_parameter_name], schema=\
-                {
-                    "type": "object",
-                    "additionalProperties": False,
-                    "required": [ "value", "units" ],
-                    "properties": {
-                        "value": { "type": "string", "pattern": config.quota_scheme[quota_object_name][quota_parameter_name]["regex"] },
-                        "units": { "type": "string", "enum": valid_units if isinstance(valid_units, list) else [ valid_units ] }
-                    }
-                })
-
-                # append parameter
-                parameters[quota_parameter_name] = "{}{}".format(user_scheme[quota_object_name][quota_parameter_name]["value"], user_scheme[quota_object_name][quota_parameter_name]["units"])
-
-            # build new patch object
-            patches.append({
-                "name": quota_object_name,
-                "data": {
-                    "spec": {
-                        "hard": parameters
-                    }
-                }
-            })
-
-    except KeyError as error:
-        abort("key was not found in user provided scheme: {}".format(error), 400)
-
-    except (jsonschema.ValidationError) as error:
+        jsonschema.validate(instance=user_scheme, schema=config.schemas.quota)
+    except jsonschema.ValidationError as error:
         abort("user provided scheme is invalid: {}".format(error.message), 400)
+
+    patches = []
+        
+    # iterate quota objects
+    for quota_object_name in config.quota_scheme.keys():
+
+        parameters = {}
+
+        # iterate quota parameters
+        for quota_parameter_name in config.quota_scheme[quota_object_name].keys():
+
+            # append parameter
+            parameters[quota_parameter_name] = "{}{}".format(user_scheme[quota_object_name][quota_parameter_name]["value"], user_scheme[quota_object_name][quota_parameter_name]["units"])
+
+        # build new patch object
+        patches.append({
+            "name": quota_object_name,
+            "data": {
+                "spec": {
+                    "hard": parameters
+                }
+            }
+        })
 
     # update each quota object separately
     for patch in patches:
