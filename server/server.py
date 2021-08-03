@@ -311,21 +311,22 @@ def setQuota():
             # iterate quota parameters
             for quota_parameter_name in config.quota_scheme[quota_object_name].keys():
 
-                # store value and units
-                value = user_scheme[quota_object_name][quota_parameter_name]["value"]
-                units = user_scheme[quota_object_name][quota_parameter_name]["units"]
-                regex = config.quota_scheme[quota_object_name][quota_parameter_name]["regex"]
-                config_units = config.quota_scheme[quota_object_name][quota_parameter_name]["units"]
+                valid_units = config.quota_scheme[quota_object_name][quota_parameter_name]["units"]
 
-                # assert value regex match
-                assert bool(re.match(regex, value)), "value '{}' for parameter '{}' does not match regex '{}'".format(value, quota_parameter_name, regex)
-
-                # assert units are valid
-                valid_units = config_units if isinstance(config_units, list) else [ config_units ]
-                assert units in valid_units, "units '{}' for parameter '{}' are not one of the following: '{}'".format(units, quota_parameter_name, valid_units)
+                # validate against schema of current parameter
+                jsonschema.validate(instance=user_scheme[quota_object_name][quota_parameter_name], schema=\
+                {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": [ "value", "units" ],
+                    "properties": {
+                        "value": { "type": "string", "pattern": config.quota_scheme[quota_object_name][quota_parameter_name]["regex"] },
+                        "units": { "type": "string", "enum": valid_units if isinstance(valid_units, list) else [ valid_units ] }
+                    }
+                })
 
                 # append parameter
-                parameters[quota_parameter_name] = "{}{}".format(value, units)
+                parameters[quota_parameter_name] = "{}{}".format(user_scheme[quota_object_name][quota_parameter_name]["value"], user_scheme[quota_object_name][quota_parameter_name]["units"])
 
             # build new patch object
             patches.append({
@@ -340,8 +341,8 @@ def setQuota():
     except KeyError as error:
         abort("key was not found in user provided scheme: {}".format(error), 400)
 
-    except (AssertionError, TypeError) as error:
-        abort("user provided scheme is invalid: {}".format(error), 400)
+    except (jsonschema.ValidationError) as error:
+        abort("user provided scheme is invalid: {}".format(error.message), 400)
 
     # update each quota object separately
     for patch in patches:
