@@ -40,7 +40,7 @@ objects:
               },
               "requests.memory": {
                   "name": "Memory",
-                  "units": "Gi",
+                  "units": [ "Gi", "Mi" ],
                   "regex": "^\\d*\\.?\\d*$",
                   "regex_description": "Must be a floating point non-negative number"
               }

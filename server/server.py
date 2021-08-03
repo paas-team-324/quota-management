@@ -58,6 +58,9 @@ class Config:
             with open(self.quota_scheme_path, 'r') as quota_scheme_file:
                 self.quota_scheme = json.loads(quota_scheme_file.read())
 
+            # list of valid quantity units
+            valid_units = [ "", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "n", "u", "m", "k", "M", "G", "T", "P", "E" ]
+
             # this is how a quota scheme should look like
             schema = \
             {
@@ -74,7 +77,19 @@ class Config:
                             "required": [ "name", "units", "regex", "regex_description" ],
                             "properties": {
                                 "name": { "type": "string" },
-                                "units": { "type": "string", "pattern": "^(|Ki|Mi|Gi|Ti|Pi|Ei|n|u|m|k|M|G|T|P|E)$" },
+                                "units": {
+                                    "anyOf": [
+                                        {
+                                            "enum": valid_units
+                                        },
+                                        {
+                                            "type": "array",
+                                            "minItems": 2,
+                                            "uniqueItems": True,
+                                            "items": { "enum": valid_units }
+                                        }
+                                    ]
+                                },
                                 "regex": { "type": "string" },
                                 "regex_description": { "type": "string" }
                             }
@@ -257,11 +272,18 @@ def getQuota():
             except KeyError:
                 abort("quota parameter '{}' is not defined in '{}' resource quota in project '{}'".format(quota_parameter_name, quota_object_name, flask.request.args["project"]), 500)
 
-            # convert to desired units
-            value_decimal /= parse_quantity("1{}".format(config.quota_scheme[quota_object_name][quota_parameter_name]["units"]))
+            # get desired units
+            config_units = config.quota_scheme[quota_object_name][quota_parameter_name]["units"]
+            units = config_units[0] if isinstance(config_units, list) else config_units
+
+            # convert to desired quantity based on units
+            value_decimal /= parse_quantity("1{}".format(units))
 
             # strip trailing zeroes, format as float and set in return JSON
-            project_quota[quota_object_name][quota_parameter_name] = '{:f}'.format(value_decimal.normalize())
+            project_quota[quota_object_name][quota_parameter_name] = {
+                "value": '{:f}'.format(value_decimal.normalize()),
+                "units": units
+            }
 
     return flask.jsonify(project_quota), 200
 
@@ -289,13 +311,22 @@ def setQuota():
             # iterate quota parameters
             for quota_parameter_name in config.quota_scheme[quota_object_name].keys():
 
-                # store value
-                value = user_scheme[quota_object_name][quota_parameter_name]
-                regex = config.quota_scheme[quota_object_name][quota_parameter_name]["regex"]
+                valid_units = config.quota_scheme[quota_object_name][quota_parameter_name]["units"]
 
-                # assert regex match and append units
-                assert bool(re.match(regex, value)), "value '{}' for parameter '{}' does not match regex '{}'".format(value, quota_parameter_name, regex)
-                parameters[quota_parameter_name] = "{}{}".format(value, config.quota_scheme[quota_object_name][quota_parameter_name]["units"])
+                # validate against schema of current parameter
+                jsonschema.validate(instance=user_scheme[quota_object_name][quota_parameter_name], schema=\
+                {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": [ "value", "units" ],
+                    "properties": {
+                        "value": { "type": "string", "pattern": config.quota_scheme[quota_object_name][quota_parameter_name]["regex"] },
+                        "units": { "type": "string", "enum": valid_units if isinstance(valid_units, list) else [ valid_units ] }
+                    }
+                })
+
+                # append parameter
+                parameters[quota_parameter_name] = "{}{}".format(user_scheme[quota_object_name][quota_parameter_name]["value"], user_scheme[quota_object_name][quota_parameter_name]["units"])
 
             # build new patch object
             patches.append({
@@ -310,8 +341,8 @@ def setQuota():
     except KeyError as error:
         abort("key was not found in user provided scheme: {}".format(error), 400)
 
-    except (AssertionError, TypeError) as error:
-        abort("user provided scheme is invalid: {}".format(error), 400)
+    except (jsonschema.ValidationError) as error:
+        abort("user provided scheme is invalid: {}".format(error.message), 400)
 
     # update each quota object separately
     for patch in patches:

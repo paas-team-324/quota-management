@@ -1,5 +1,5 @@
 import React from 'react';
-import { TextField, Grid } from '@material-ui/core';
+import { TextField, Grid, MenuItem, Box } from '@material-ui/core';
 
 class QuotaParameter extends React.Component {
 
@@ -8,44 +8,77 @@ class QuotaParameter extends React.Component {
 
         this.state = {
             name: this.props.parameter["name"],
-            units: (this.props.parameter["units"] === '' ? '' : '(' + this.props.parameter["units"] + ')'),
+            units: this.props.parameter["units"],
             regex: new RegExp(this.props.parameter["regex"]),
             regex_description: this.props.parameter["regex_description"],
 
-            value: this.props.current
+            value: this.props.current["value"],
+            selected_units: this.props.current["units"]
         };
 
         this.validate = this.validate.bind(this)
     };
 
-    validate(event) {
+    validate(value) {
  
         // test input with regex
-        if (event.target.value === '' || this.state.regex.test(event.target.value)) {
+        if (value === '' || this.state.regex.test(value)) {
 
             // set field text
             this.setState({
-                value: event.target.value
+                value: value,
             })
 
             // edit quota object
-            this.props.edit(this.props.parameter_name, event.target.value)
+            this.props.edit(this.props.parameter_name, value, this.state.selected_units)
         }
 
     }
 
     render() {
         return (
-            <TextField
-                id={this.props.parameter_name}
-                name={this.props.parameter_name}
-                label={this.state.name + " " + this.state.units}
-                helperText={this.state.regex_description}
-                value={this.state.value}
-                onChange={event => this.validate(event)}
-                style={{ marginTop: '4%' }}
-                fullWidth
-            />
+            <Box width="100%" style={{ marginTop: '4%', display: "flex" }}>
+                <Grid item xs={ this.state.units === "" ? 12 : 10 }>
+                    <TextField
+                        id={this.props.parameter_name}
+                        name={this.props.parameter_name}
+                        label={this.state.name}
+                        helperText={this.state.regex_description}
+                        value={this.state.value}
+                        onChange={event => this.validate(event.target.value)}
+                        fullWidth
+                    />
+                </Grid>
+                { this.state.units !== "" &&
+                    <Grid item xs={2} style={{ paddingLeft: '2%' }}>
+                        <TextField
+                            id={this.props.parameter_name + "_units"}
+                            name={this.props.parameter_name + "_units"}
+                            label=" "
+                            helperText=" "
+                            value={ this.state.selected_units }
+                            select={Array.isArray(this.state.units)}
+                            onChange={event => {
+                                this.setState({
+                                    selected_units: event.target.value
+                                }, function() {
+                                    this.validate(this.state.value)
+                                })
+                            }}
+                            InputProps={{
+                                readOnly: !Array.isArray(this.state.units),
+                            }}
+                            fullWidth
+                        >
+                        { Array.isArray(this.state.units) &&
+                            this.state.units.map(unit => 
+                                <MenuItem value={unit}>{unit}</MenuItem>
+                            )
+                        }
+                        </TextField>
+                    </Grid>
+                }
+            </Box>
         )
     }
 
@@ -63,7 +96,7 @@ class ResourceQuota extends React.Component {
         this.edit = this.edit.bind(this)
     };
 
-    edit(name, value) {
+    edit(name, value, units) {
 
         let quota = this.state.quota
 
@@ -71,7 +104,10 @@ class ResourceQuota extends React.Component {
         if (value === '') {
             delete quota[name]
         } else {
-            quota[name] = value
+            quota[name] = {
+                "value": value,
+                "units": units,
+            }
         }
 
         this.setState({
