@@ -389,7 +389,7 @@ def setQuota():
                     "/api/v1/namespaces/{}/resourcequotas/{}".format(flask.request.args["project"], patch["name"]),
                     json=patch["data"],
                     contentType="application/strategic-merge-patch+json")
-        logger.info("user '{}' has updated the following quota: {}".format(username, patch))
+        logger.info("user '{}' has updated the following quota for project '{}': {}".format(username, flask.request.args["project"], patch))
 
     return flask.jsonify({ "message": "quota updated successfully for project '{}'".format(flask.request.args["project"]) }), 200
 
