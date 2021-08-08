@@ -145,8 +145,10 @@ class Config:
         try:
             self.name = "quota-manager"
             self.quota_scheme_path = os.environ["QUOTA_SCHEME_FILE"]
-            self.managed_project_label = os.environ["MANAGED_NAMESPACE_LABEL"]
+            self.managed_project_label_name = os.environ["MANAGED_NAMESPACE_LABEL_NAME"]
+            self.managed_project_label_value = os.environ["MANAGED_NAMESPACE_LABEL_VALUE"]
             self.quota_managers_group = os.environ["QUOTA_MANAGERS_GROUP"]
+            self.namespace = os.environ["NAMESPACE"]
         except KeyError as error:
             config_logger.critical("one of the environment variables is not defined: {}".format(error))
 
@@ -222,7 +224,7 @@ def getProjectList():
 
     # query API
     response = apiRequest("GET",
-                          "/api/v1/namespaces?labelSelector={}".format(config.managed_project_label))
+                          "/api/v1/namespaces?labelSelector={}={}".format(config.managed_project_label_name, config.managed_project_label_value))
 
     # return project names
     return {
@@ -286,10 +288,85 @@ def getProjects():
     # return jsonified project names
     return flask.jsonify(getProjectList())
 
-# TODO
 @app.route("/projects", methods=["POST"])
 def createProject():
-    return "", 501
+
+    # validate arguments
+    validateParams(flask.request.args, [ "newproject", "admin" ])
+
+    # TODO try catch w message
+    # get user quota scheme (throws 400 on error)
+    user_scheme = flask.request.get_json(force=True)
+
+    # ensure admin user conforms to regex
+
+    # validate user quota scheme
+    # try:
+    #     jsonschema.validate(instance=user_scheme, schema=config.schemas.quota)
+    # except jsonschema.ValidationError as error:
+    #     abort("user provided scheme is invalid: {}".format(error.message), 400)
+
+    for dry_run in [
+        True
+    ]:
+
+        dry_run_project = config.namespace if dry_run else flask.request.args["newproject"]
+        dry_run_query_param = "?dryRun=All" if dry_run else ""
+
+        # as it turns out, you can't dryRun a projectRequest because OpenShift
+        # therefore we only attempt creation when dryRun is false
+        if not dry_run:
+
+            # request project creation
+            apiRequest( "POST",
+                        "/apis/project.openshift.io/v1/projectrequests",
+                        json={
+                            "kind": "ProjectRequest",
+                            "apiVersion": "project.openshift.io/v1",
+                            "metadata": {
+                                "name": flask.request.args["newproject"]
+                            }
+                        })
+
+        # quota
+
+        # label namespace with managed label
+        apiRequest( "PATCH",
+                    "/api/v1/namespaces/{}{}".format( dry_run_project, dry_run_query_param),
+                    json={
+                        "metadata": {
+                            "labels": {
+                                config.managed_project_label_name: config.managed_project_label_value
+                            }
+                        }
+                    },
+                    contentType="application/strategic-merge-patch+json")
+
+        # assign admin to project
+        apiRequest( "POST",
+                    "/apis/authorization.openshift.io/v1/namespaces/{}/rolebindings{}".format(dry_run_project, dry_run_query_param),
+                    json={
+                        "kind": "RoleBinding",
+                        "apiVersion": "authorization.openshift.io/v1",
+                        "metadata": {
+                            "name": "admin-{}".format(flask.request.args["admin"]),
+                            "namespace": dry_run_project
+                        },
+                        "roleRef": {
+                            "apiGroup": "rbac.authorization.k8s.io",
+                            "kind": "ClusterRole",
+                            "name": "admin"
+                        },
+                        "subjects": [
+                            {
+                                "apiGroup": "rbac.authorization.k8s.io",
+                                "kind": "User",
+                                "name": flask.request.args["admin"]
+                            }
+                        ]
+                    })
+
+    return flask.jsonify({ "message": "project '{}' has been successfully created".format(flask.request.args["project"]) }), 200
 
 @app.route("/healthz", methods=["GET"])
 @authorization_not_required
