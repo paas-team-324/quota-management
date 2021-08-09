@@ -206,10 +206,12 @@ objects:
             value: "${MANAGED_NAMESPACE_LABEL_VALUE}"
           - name: QUOTA_MANAGERS_GROUP
             value: "${QUOTA_MANAGERS_GROUP}"
-          - name: NAMESPACE
+          - name: DRY_RUN_NAMESPACE
             valueFrom:
               fieldRef:
                 fieldPath: metadata.namespace
+          - name: USERNAME_FORMATTING
+            value: "${USERNAME_FORMATTING}"
           volumeMounts:
           - name: scheme
             mountPath: "/app/scheme.json"
@@ -303,6 +305,10 @@ parameters:
   required: true
 - description: Router's wildcard DNS record
   name: ROUTER_CANONICAL_HOSTNAME
+  required: true
+- description: During project creation, format username in order to append additional data (e.g. domain)
+  value: "{}"
+  name: USERNAME_FORMATTING
   required: true
 - description: Docker image to use for the UI
   value: docker.io/vladpbr/quota-management-client:1.1
