@@ -350,7 +350,7 @@ def r_get_projects():
 def r_post_projects():
 
     # disabled for now
-    # return "", 501
+    return "", 501
 
     # validate arguments
     validate_params(flask.request.args, [ "newproject", "admin" ])
