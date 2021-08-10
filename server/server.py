@@ -346,6 +346,9 @@ def getProjects():
 @app.route("/projects", methods=["POST"])
 def createProject():
 
+    # disabled for now
+    return "", 501
+
     # validate arguments
     validateParams(flask.request.args, [ "newproject", "admin" ])
 
