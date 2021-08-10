@@ -7,7 +7,7 @@ import json
 import os
 import jsonschema
 from kubernetes.utils.quantity import parse_quantity
-from gevent.pywsgi import WSGIServer
+from gevent.pywsgi import WSGIServer, WSGIHandler
 from werkzeug.exceptions import BadRequest
 
 def get_logger(name):
@@ -26,6 +26,17 @@ def get_logger(name):
     logger.addHandler(log_handler)
 
     return logger
+
+class CustomWSGIHandler(WSGIHandler):
+
+    def log_request(self):
+
+        # do not log request for routes excluded from logging
+        if self.path in [ route_to_path(route) for route in disable_logging_for_routes ]:
+            return
+
+        # log request as usual
+        return super(CustomWSGIHandler, self).log_request()
 
 class Schemas:
 
@@ -190,7 +201,17 @@ class Config:
 config = Config()
 logger = get_logger(config.name)
 app = flask.Flask(config.name)
-public_routes = []
+disable_auth_for_routes = []
+disable_logging_for_routes = []
+
+def route_to_path(route):
+
+    # iterate app rules map and return matching path
+    for rule in app.url_map.iter_rules():
+        if rule.endpoint == route:
+            return rule.rule
+
+    return None
 
 def format_response(message):
     return { "message": message }
@@ -269,7 +290,7 @@ def get_project_list():
 def check_authorization():
 
     # do not check public routes
-    if flask.request.endpoint in public_routes:
+    if flask.request.endpoint in disable_auth_for_routes:
         return
 
     # make sure authentication token is present
@@ -290,8 +311,12 @@ def internal_server_error(error):
     logger.error(error.original_exception)
     return flask.jsonify(format_response(error.description)), 500
 
-def authorization_not_required(route):
-    public_routes.append(route.__name__)
+def do_not_authorize(route):
+    disable_auth_for_routes.append(route.__name__)
+    return route
+
+def do_not_log(route):
+    disable_logging_for_routes.append(route.__name__)
     return route
 
 def get_username(token):
@@ -356,7 +381,7 @@ def patch_quota(user_scheme, project, username, dry_run=False):
             logger.info(f"user '{username}' has updated the '{patch['name']}' quota for project '{project}': {patch['data']['spec']['hard']}")
 
 @app.route("/username", methods=["GET"])
-@authorization_not_required
+@do_not_authorize
 def r_get_username():
     validate_params(flask.request.args, [ "token" ])
     return get_username(flask.request.args["token"]), 200
@@ -464,7 +489,8 @@ def r_post_projects():
     return flask.jsonify(format_response(f"project '{new_project}' has been successfully created")), 200
 
 @app.route("/healthz", methods=["GET"])
-@authorization_not_required
+@do_not_authorize
+@do_not_log
 def healthz():
     return "OK", 200
 
@@ -534,5 +560,10 @@ def r_put_quota():
 if __name__ == "__main__":
     listener = ( "0.0.0.0", 5000 )
     api_logger = get_logger("api")
+
+    # notify of specific endpoint behaviour
+    api_logger.info(f"disabling authorization for the following endpoints: {[ route_to_path(route) for route in disable_auth_for_routes ]}")
+    api_logger.info(f"disabling request logging for the following endpoints: {[ route_to_path(route) for route in disable_logging_for_routes ]}")
+
     api_logger.info(f"listening on {listener[0]}:{listener[1]}")
-    WSGIServer(listener, app, log=api_logger).serve_forever()
+    WSGIServer(listener, app, log=api_logger, handler_class=CustomWSGIHandler).serve_forever()
