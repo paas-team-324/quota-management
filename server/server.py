@@ -79,7 +79,9 @@ class Schemas:
         namespace = \
         {
             "type": "string",
-            "pattern": "(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?"
+            "pattern": "(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?",
+            "minLength": 2,
+            "maxLength": 63
         }
 
         def __init__(self, quota):
