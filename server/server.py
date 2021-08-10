@@ -22,7 +22,7 @@ def get_logger(name):
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
     log_handler = ExitOnExceptionHandler()
-    log_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    log_handler.setFormatter(logging.Formatter('[%(asctime)s] - %(name)s - %(levelname)s - %(message)s'))
     logger.addHandler(log_handler)
 
     return logger
@@ -37,6 +37,25 @@ class CustomWSGIHandler(WSGIHandler):
 
         # log request as usual
         return super(CustomWSGIHandler, self).log_request()
+
+    def format_request(self):
+
+        # slightly edited version of the super method, minus the timestamp
+        # original method can be seen here:
+        # https://github.com/gevent/gevent/blob/4171bc513656d3916b8e4dfe4e8710431ab0d5d0/src/gevent/pywsgi.py#L910
+
+        length = self.response_length or '-'
+        if self.time_finish:
+            delta = '%.6f' % (self.time_finish - self.time_start)
+        else:
+            delta = '-'
+        client_address = self.client_address[0] if isinstance(self.client_address, tuple) else self.client_address
+        return '%s - "%s" %s %s %s' % (
+            client_address or '-',
+            self.requestline or '',
+            (self._orig_status or self.status or '000').split()[0],
+            length,
+            delta)
 
 class Schemas:
 
