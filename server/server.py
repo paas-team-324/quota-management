@@ -312,7 +312,10 @@ def get_username(token):
 def patch_quota(user_scheme, project, username, dry_run=False):
 
     # validate user quota scheme
-    jsonschema.validate(instance=user_scheme, schema=config.schemas.quota)
+    try:
+        jsonschema.validate(instance=user_scheme, schema=config.schemas.quota)
+    except jsonschema.ValidationError as error:
+        abort(f"user provided scheme is invalid: {error.message}", 400)
 
     patches = []
         
@@ -407,10 +410,7 @@ def r_post_projects():
             logger.info(f"user '{user_name}' has created a project called '{new_project}'")
 
         # patch new project's quota
-        try:
-            patch_quota(get_request_json(flask.request), run_project, get_username(flask.request.args["token"]), dry_run=dry_run)
-        except jsonschema.ValidationError as error:
-            abort(f"user provided scheme is invalid: {error.message}", 400)
+        patch_quota(get_request_json(flask.request), run_project, get_username(flask.request.args["token"]), dry_run=dry_run)
 
         # label namespace with managed label
         api_request("PATCH",
@@ -522,10 +522,7 @@ def r_put_quota():
     validate_namespace(flask.request.args['project'])
 
     # try patching quota
-    try:
-        patch_quota(get_request_json(flask.request), flask.request.args["project"], get_username(flask.request.args["token"]))
-    except jsonschema.ValidationError as error:
-        abort(f"user provided scheme is invalid: {error.message}", 400)
+    patch_quota(get_request_json(flask.request), flask.request.args["project"], get_username(flask.request.args["token"]))
 
     return flask.jsonify(format_response(f"quota updated successfully for project '{flask.request.args['project']}'")), 200
 
