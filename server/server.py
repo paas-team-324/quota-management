@@ -6,11 +6,10 @@ import logging
 import json
 import os
 import jsonschema
-import re
 from kubernetes.utils.quantity import parse_quantity
 from gevent.pywsgi import WSGIServer
 
-def getLogger(name):
+def get_logger(name):
 
     class ExitOnExceptionHandler(logging.StreamHandler):
         def emit(self, record):
@@ -86,7 +85,7 @@ class Schemas:
         def __init__(self, quota):
 
             # schema logger
-            schema_logger = getLogger("schema")
+            schema_logger = get_logger("schema")
 
             try:
 
@@ -145,7 +144,7 @@ class Config:
     def __init__(self):
 
         # config loader logger
-        config_logger = getLogger("config-loader")
+        config_logger = get_logger("config-loader")
 
         # read pod token
         pod_token_file_path = "/var/run/secrets/kubernetes.io/serviceaccount/token"
@@ -186,7 +185,7 @@ class Config:
         return self.username_formatting.format(username)
 
 config = Config()
-logger = getLogger(config.name)
+logger = get_logger(config.name)
 app = flask.Flask(config.name)
 public_routes = []
 
@@ -194,7 +193,7 @@ def abort(message, code):
     logger.debug(message)
     flask.abort(flask.make_response({ "message": message }, code ))
 
-def apiRequest(method, uri, token=config.pod_token, json=None, contentType="application/json"):
+def api_request(method, uri, token=config.pod_token, json=None, contentType="application/json"):
 
     # make request
     try:
@@ -217,17 +216,17 @@ def apiRequest(method, uri, token=config.pod_token, json=None, contentType="appl
 
     return response
 
-def validateParams(request_args, args):
+def validate_params(request_args, args):
 
     # abort request if one of the args was not provided
     for arg in args:
         if arg not in request_args:
             abort("missing '{}' query parameter".format(arg), 400)
 
-def validateQuotaManager(username, project=None):
+def validate_quota_manager(username, project=None):
 
     # fetch list of quota managers
-    managers_list = apiRequest( "GET",
+    managers_list = api_request("GET",
                                 "/apis/user.openshift.io/v1/groups/{}".format(config.quota_managers_group)).json()["users"]
 
     # make sure user can manage quota
@@ -235,14 +234,14 @@ def validateQuotaManager(username, project=None):
         abort("user '{}' is not allowed to manage project quota".format(username), 401)
 
     # make sure target namespace is managed
-    if project != None and project not in getProjectList()["projects"]:
+    if project != None and project not in get_project_list()["projects"]:
         abort("project '{}' is not managed".format(project), 400)
 
-def getProjectList():
+def get_project_list():
 
     # query API
-    response = apiRequest("GET",
-                          "/api/v1/namespaces?labelSelector={}={}".format(config.managed_project_label_name, config.managed_project_label_value))
+    response = api_request( "GET",
+                            "/api/v1/namespaces?labelSelector={}={}".format(config.managed_project_label_name, config.managed_project_label_value))
 
     # return project names
     return {
@@ -257,12 +256,12 @@ def check_authorization():
         return
 
     # validate arguments
-    validateParams(flask.request.args, [ "token" ])
+    validate_params(flask.request.args, [ "token" ])
 
     # validate quota manager and optional project
-    username = getUsername(flask.request.args["token"])
+    username = get_username(flask.request.args["token"])
     project = flask.request.args["project"] if "project" in flask.request.args else None
-    validateQuotaManager(username, project=project)
+    validate_quota_manager(username, project=project)
 
 @app.after_request
 def after_request(response):
@@ -274,10 +273,10 @@ def authorization_not_required(route):
     public_routes.append(route.__name__)
     return route
 
-def getUsername(token):
+def get_username(token):
 
     # review user token
-    review_result = apiRequest( "POST",
+    review_result = api_request("POST",
                                 "/apis/authentication.k8s.io/v1/tokenreviews",
                                 json=\
                                     {
@@ -324,7 +323,7 @@ def patch_quota(user_scheme, project, username, dry_run=False):
 
     # update each quota object separately
     for patch in patches:
-        apiRequest( "PATCH",
+        api_request("PATCH",
                     "/api/v1/namespaces/{}/resourcequotas/{}{}".format(project, patch["name"], "?dryRun=All" if dry_run else ""),
                     json=patch["data"],
                     contentType="application/strategic-merge-patch+json")
@@ -333,24 +332,24 @@ def patch_quota(user_scheme, project, username, dry_run=False):
 
 @app.route("/username", methods=["GET"])
 @authorization_not_required
-def getUsernameRoute():
-    validateParams(flask.request.args, [ "token" ])
-    return getUsername(flask.request.args["token"]), 200
+def r_get_username():
+    validate_params(flask.request.args, [ "token" ])
+    return get_username(flask.request.args["token"]), 200
 
 @app.route("/projects", methods=["GET"])
-def getProjects():
+def r_get_projects():
 
     # return jsonified project names
-    return flask.jsonify(getProjectList())
+    return flask.jsonify(get_project_list())
 
 @app.route("/projects", methods=["POST"])
-def createProject():
+def r_post_projects():
 
     # disabled for now
     return "", 501
 
     # validate arguments
-    validateParams(flask.request.args, [ "newproject", "admin" ])
+    validate_params(flask.request.args, [ "newproject", "admin" ])
 
     # ensure admin username and namespace name are valid
     try:
@@ -360,7 +359,7 @@ def createProject():
         abort("'{}' is invalid: {}".format(error.instance, error.message), 400)
 
     # helper variables
-    user_name = getUsername(flask.request.args["token"])
+    user_name = get_username(flask.request.args["token"])
     admin_user_name = config.format_username(flask.request.args["admin"])
     new_project = flask.request.args["newproject"]
 
@@ -379,7 +378,7 @@ def createProject():
         if not dry_run:
 
             # request project creation
-            apiRequest( "POST",
+            api_request("POST",
                         "/apis/project.openshift.io/v1/projectrequests",
                         json={
                             "kind": "ProjectRequest",
@@ -393,12 +392,12 @@ def createProject():
 
         # patch new project's quota
         try:
-            patch_quota(flask.request.get_json(force=True), run_project, getUsername(flask.request.args["token"]), dry_run=dry_run)
+            patch_quota(flask.request.get_json(force=True), run_project, get_username(flask.request.args["token"]), dry_run=dry_run)
         except jsonschema.ValidationError as error:
             abort("user provided scheme is invalid: {}".format(error.message), 400)
 
         # label namespace with managed label
-        apiRequest( "PATCH",
+        api_request("PATCH",
                     "/api/v1/namespaces/{}{}".format( run_project, dry_run_query_param),
                     json={
                         "metadata": {
@@ -413,7 +412,7 @@ def createProject():
             logger.info("user '{}' has labeled project '{}' as managed".format(user_name, new_project))
 
         # assign admin to project
-        apiRequest( "POST",
+        api_request("POST",
                     "/apis/authorization.openshift.io/v1/namespaces/{}/rolebindings{}".format(run_project, dry_run_query_param),
                     json={
                         "kind": "RoleBinding",
@@ -447,14 +446,14 @@ def healthz():
     return "OK", 200
 
 @app.route("/scheme", methods=["GET"])
-def getScheme():
+def r_get_scheme():
     return flask.jsonify(config.quota_scheme)
 
 @app.route("/quota", methods=["GET"])
-def getQuota():
+def r_get_quota():
 
     # validate arguments
-    validateParams(flask.request.args, [ "project" ])
+    validate_params(flask.request.args, [ "project" ])
 
     # prepare project quota JSON to be returned
     project_quota = {}
@@ -465,7 +464,7 @@ def getQuota():
         project_quota[quota_object_name] = {}
 
         # fetch quota object from project
-        quota_object = apiRequest(  "GET",
+        quota_object = api_request( "GET",
                                     "/api/v1/namespaces/{}/resourcequotas/{}".format(flask.request.args["project"], quota_object_name)).json()
 
         # iterate quota parameters
@@ -493,14 +492,14 @@ def getQuota():
     return flask.jsonify(project_quota), 200
 
 @app.route("/quota", methods=["PUT"])
-def setQuota():
+def r_put_quota():
 
     # validate arguments
-    validateParams(flask.request.args, [ "project" ])
+    validate_params(flask.request.args, [ "project" ])
 
     # try patching quota
     try:
-        patch_quota(flask.request.get_json(force=True), flask.request.args["project"], getUsername(flask.request.args["token"]))
+        patch_quota(flask.request.get_json(force=True), flask.request.args["project"], get_username(flask.request.args["token"]))
     except jsonschema.ValidationError as error:
         abort("user provided scheme is invalid: {}".format(error.message), 400)
 
@@ -508,6 +507,6 @@ def setQuota():
 
 if __name__ == "__main__":
     listener = ( "0.0.0.0", 5000 )
-    api_logger = getLogger("api")
+    api_logger = get_logger("api")
     api_logger.info("listening on {}:{}".format(listener[0], listener[1]))
     WSGIServer(listener, app, log=api_logger).serve_forever()
