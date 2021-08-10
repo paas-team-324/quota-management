@@ -225,7 +225,7 @@ def validate_params(request_args, args):
         if arg not in request_args:
             abort(f"missing '{arg}' query parameter", 400)
 
-def validate_quota_manager(username, project=None):
+def validate_quota_manager(username):
 
     # fetch list of quota managers
     managers_list = api_request("GET",
@@ -235,9 +235,11 @@ def validate_quota_manager(username, project=None):
     if type(managers_list) != list or username not in managers_list:
         abort(f"user '{username}' is not allowed to manage project quota", 401)
 
-    # make sure target namespace is managed
-    if project != None and project not in get_project_list()["projects"]:
-        abort(f"project '{project}' is not managed", 400)
+def validate_namespace(namespace):
+    
+    # make sure namespace has managed label
+    if namespace not in get_project_list()["projects"]:
+        abort(f"project '{namespace}' is not managed", 400)
 
 def get_project_list():
 
@@ -258,13 +260,12 @@ def check_authorization():
     if flask.request.endpoint in public_routes:
         return
 
-    # validate arguments
+    # make sure authentication token is present
     validate_params(flask.request.args, [ "token" ])
 
-    # validate quota manager and optional project
+    # make sure user is a quota manager
     username = get_username(flask.request.args["token"])
-    project = flask.request.args["project"] if "project" in flask.request.args else None
-    validate_quota_manager(username, project=project)
+    validate_quota_manager(username)
 
 @app.after_request
 def after_request(response):
@@ -353,19 +354,19 @@ def r_post_projects():
     return "", 501
 
     # validate arguments
-    validate_params(flask.request.args, [ "newproject", "admin" ])
+    validate_params(flask.request.args, [ "project", "admin" ])
 
     # ensure admin username and namespace name are valid
     try:
         jsonschema.validate(instance=flask.request.args["admin"], schema=config.schemas.username)
-        jsonschema.validate(instance=flask.request.args["newproject"], schema=config.schemas.namespace)
+        jsonschema.validate(instance=flask.request.args["project"], schema=config.schemas.namespace)
     except jsonschema.ValidationError as error:
         abort(f"'{error.instance}' is invalid: {error.message}", 400)
 
     # helper variables
     user_name = get_username(flask.request.args["token"])
     admin_user_name = config.format_username(flask.request.args["admin"])
-    new_project = flask.request.args["newproject"]
+    new_project = flask.request.args["project"]
 
     # dry run project creation, then do actual creation if no errors occurred
     for dry_run in [
@@ -460,6 +461,9 @@ def r_get_quota():
     # validate arguments
     validate_params(flask.request.args, [ "project" ])
 
+    # make sure project is managed
+    validate_namespace(flask.request.args['project'])
+
     # prepare project quota JSON to be returned
     project_quota = {}
 
@@ -501,6 +505,9 @@ def r_put_quota():
 
     # validate arguments
     validate_params(flask.request.args, [ "project" ])
+
+    # make sure project is managed
+    validate_namespace(flask.request.args['project'])
 
     # try patching quota
     try:
