@@ -58,127 +58,127 @@ class CustomWSGIHandler(WSGIHandler):
             length,
             delta)
 
-class Schemas:
+class Config:
 
-        # list of valid quantity units
-        _valid_units = [ "", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "n", "u", "m", "k", "M", "G", "T", "P", "E" ]
+    class _Schemas:
 
-        # this is how a quota scheme should look like
-        scheme_file = \
-        {
-            "type": "object",
-            "minProperties": 1,
-            "additionalProperties": False,
-            "patternProperties": {
-                "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$": {
-                    "type": "object",
-                    "minProperties": 1,
-                    "additionalProperties": {
+            # list of valid quantity units
+            _valid_units = [ "", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "n", "u", "m", "k", "M", "G", "T", "P", "E" ]
+
+            # this is how a quota scheme should look like
+            scheme_file = \
+            {
+                "type": "object",
+                "minProperties": 1,
+                "additionalProperties": False,
+                "patternProperties": {
+                    "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$": {
                         "type": "object",
-                        "additionalProperties": False,
-                        "required": [ "name", "units", "regex", "regex_description" ],
-                        "properties": {
-                            "name": { "type": "string" },
-                            "units": {
-                                "anyOf": [
-                                    {
-                                        "enum": _valid_units
-                                    },
-                                    {
-                                        "type": "array",
-                                        "minItems": 2,
-                                        "uniqueItems": True,
-                                        "items": { "enum": _valid_units }
-                                    }
-                                ]
-                            },
-                            "regex": { "type": "string" },
-                            "regex_description": { "type": "string" }
+                        "minProperties": 1,
+                        "additionalProperties": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "required": [ "name", "units", "regex", "regex_description" ],
+                            "properties": {
+                                "name": { "type": "string" },
+                                "units": {
+                                    "anyOf": [
+                                        {
+                                            "enum": _valid_units
+                                        },
+                                        {
+                                            "type": "array",
+                                            "minItems": 2,
+                                            "uniqueItems": True,
+                                            "items": { "enum": _valid_units }
+                                        }
+                                    ]
+                                },
+                                "regex": { "type": "string" },
+                                "regex_description": { "type": "string" }
+                            }
                         }
                     }
                 }
             }
-        }
 
-        # user object name validation
-        username = \
-        {
-            "type": "string",
-            "pattern": "^[^/%\s]+$"
-        }
-
-        # namespace name validation
-        namespace = \
-        {
-            "type": "string",
-            "pattern": "(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?",
-            "minLength": 2,
-            "maxLength": 63
-        }
-
-        def __init__(self, quota):
-
-            # schema logger
-            schema_logger = get_logger("schema")
-
-            try:
-
-                # validate against schema
-                jsonschema.validate(instance=quota, schema=self.scheme_file)
-
-            except jsonschema.ValidationError as error:
-                schema_logger.critical(f"quota scheme file does not conform to schema: {error}")
-
-            schema_logger.info("quota scheme validated")
-
-            # generate quota schema based on input
-            self.quota = \
+            # user object name validation
+            username = \
             {
-                "type": "object",
-                "additionalProperties": False,
-                "required": [],
-                "properties": {}
+                "type": "string",
+                "pattern": "^[^/%\s]+$"
             }
 
-            # iterate quota objects
-            for quota_object_name in quota.keys():
+            # namespace name validation
+            namespace = \
+            {
+                "type": "string",
+                "pattern": "(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?",
+                "minLength": 2,
+                "maxLength": 63
+            }
 
-                # set current quota object as required, forbid any other keys
-                self.quota["required"].append(quota_object_name)
-                self.quota["properties"][quota_object_name] = \
+            def __init__(self, name, quota):
+
+                # schema logger
+                schema_logger = get_logger(f"{name}-schema")
+
+                try:
+
+                    # validate against schema
+                    jsonschema.validate(instance=quota, schema=self.scheme_file)
+
+                except jsonschema.ValidationError as error:
+                    schema_logger.critical(f"quota scheme file does not conform to schema: {error}")
+
+                schema_logger.info("quota scheme validated")
+
+                # generate quota schema based on input
+                self.quota = \
                 {
                     "type": "object",
                     "additionalProperties": False,
                     "required": [],
-                    "properties": {},
+                    "properties": {}
                 }
 
-                # iterate quota parameters
-                for quota_parameter_name in quota[quota_object_name].keys():
+                # iterate quota objects
+                for quota_object_name in quota.keys():
 
-                    valid_units = quota[quota_object_name][quota_parameter_name]["units"]
-
-                    # set current 'hard' quota parameter as required, forbid any other keys
-                    self.quota["properties"][quota_object_name]["required"].append(quota_parameter_name)
-                    self.quota["properties"][quota_object_name]["properties"][quota_parameter_name] = \
+                    # set current quota object as required, forbid any other keys
+                    self.quota["required"].append(quota_object_name)
+                    self.quota["properties"][quota_object_name] = \
                     {
                         "type": "object",
                         "additionalProperties": False,
-                        "required": [ "value", "units" ],
-                        "properties": {
-                            "value": { "type": "string", "pattern": quota[quota_object_name][quota_parameter_name]["regex"] },
-                            "units": { "type": "string", "enum": valid_units if isinstance(valid_units, list) else [ valid_units ] }
-                        }
+                        "required": [],
+                        "properties": {},
                     }
 
-            schema_logger.info("user quota scheme generated")
+                    # iterate quota parameters
+                    for quota_parameter_name in quota[quota_object_name].keys():
 
-class Config:
+                        valid_units = quota[quota_object_name][quota_parameter_name]["units"]
 
-    def __init__(self):
+                        # set current 'hard' quota parameter as required, forbid any other keys
+                        self.quota["properties"][quota_object_name]["required"].append(quota_parameter_name)
+                        self.quota["properties"][quota_object_name]["properties"][quota_parameter_name] = \
+                        {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "required": [ "value", "units" ],
+                            "properties": {
+                                "value": { "type": "string", "pattern": quota[quota_object_name][quota_parameter_name]["regex"] },
+                                "units": { "type": "string", "enum": valid_units if isinstance(valid_units, list) else [ valid_units ] }
+                            }
+                        }
+
+                schema_logger.info("user quota scheme generated")
+
+    def __init__(self, name):
 
         # config loader logger
-        config_logger = get_logger("config-loader")
+        config_logger = get_logger(f"{name}-config-loader")
 
         # read pod token
         pod_token_file_path = "/var/run/secrets/kubernetes.io/serviceaccount/token"
@@ -190,7 +190,7 @@ class Config:
 
         # parse environment vars
         try:
-            self.name = "quota-manager"
+            self.name = name
             self.quota_scheme_path = os.environ["QUOTA_SCHEME_FILE"]
             self.managed_project_label_name = os.environ["MANAGED_NAMESPACE_LABEL_NAME"]
             self.managed_project_label_value = os.environ["MANAGED_NAMESPACE_LABEL_VALUE"]
@@ -213,14 +213,14 @@ class Config:
             config_logger.critical(f"could not parse quota scheme JSON file at '{self.quota_scheme_path}': {error}")
 
         # generate schemas object
-        self.schemas = Schemas(self.quota_scheme)
+        self.schemas = self._Schemas(config_logger.name, self.quota_scheme)
 
     def format_username(self, username):
         return self.username_formatting.format(username)
 
-config = Config()
-logger = get_logger(config.name)
-app = flask.Flask(config.name)
+config = None
+logger = None
+app = flask.Flask(__name__)
 disable_auth_for_routes = []
 disable_logging_for_routes = []
 
@@ -240,12 +240,12 @@ def abort(message, code):
     logger.debug(message)
     flask.abort(flask.make_response(format_response(message), code ))
 
-def api_request(method, uri, token=config.pod_token, params={}, json=None, contentType="application/json", dry_run=False):
+def api_request(method, uri, params={}, json=None, contentType="application/json", dry_run=False):
 
     # make request
     try:
         response = requests.request(method, "https://kubernetes.default.svc" + uri, headers={
-            "Authorization": f"Bearer {token}",
+            "Authorization": f"Bearer {config.pod_token}",
             "Content-Type": contentType,
             "Accept": "application/json",
             "Connection": "close"
@@ -580,12 +580,19 @@ def r_put_quota():
     return flask.jsonify(format_response(f"quota updated successfully for project '{flask.request.args['project']}'")), 200
 
 if __name__ == "__main__":
+
+    # instantiate global objects
+    config = Config("quota-manager")
+    logger = get_logger(config.name)
+
+    # WSGIServer related variables
     listener = ( "0.0.0.0", 5000 )
-    api_logger = get_logger("api")
+    api_logger = get_logger(f"{config.name}-api")
 
     # notify of specific endpoint behaviour
     api_logger.info(f"disabling authorization for the following endpoints: {[ route_to_path(route) for route in disable_auth_for_routes ]}")
     api_logger.info(f"disabling request logging for the following endpoints: {[ route_to_path(route) for route in disable_logging_for_routes ]}")
 
+    # start server
     api_logger.info(f"listening on {listener[0]}:{listener[1]}")
     WSGIServer(listener, app, log=api_logger, handler_class=CustomWSGIHandler).serve_forever()
