@@ -69,6 +69,20 @@ class Schemas:
             }
         }
 
+        # user object name validation
+        username = \
+        {
+            "type": "string",
+            "pattern": "^[^/%\s]+$"
+        }
+
+        # namespace name validation
+        namespace = \
+        {
+            "type": "string",
+            "pattern": "(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?"
+        }
+
         def __init__(self, quota):
 
             # schema logger
@@ -145,8 +159,11 @@ class Config:
         try:
             self.name = "quota-manager"
             self.quota_scheme_path = os.environ["QUOTA_SCHEME_FILE"]
-            self.managed_project_label = os.environ["MANAGED_NAMESPACE_LABEL"]
+            self.managed_project_label_name = os.environ["MANAGED_NAMESPACE_LABEL_NAME"]
+            self.managed_project_label_value = os.environ["MANAGED_NAMESPACE_LABEL_VALUE"]
             self.quota_managers_group = os.environ["QUOTA_MANAGERS_GROUP"]
+            self.dry_run_namespace = os.environ["DRY_RUN_NAMESPACE"]
+            self.username_formatting = os.environ["USERNAME_FORMATTING"]
         except KeyError as error:
             config_logger.critical("one of the environment variables is not defined: {}".format(error))
 
@@ -164,6 +181,9 @@ class Config:
 
         # generate schemas object
         self.schemas = Schemas(self.quota_scheme)
+
+    def format_username(self, username):
+        return self.username_formatting.format(username)
 
 config = Config()
 logger = getLogger(config.name)
@@ -222,7 +242,7 @@ def getProjectList():
 
     # query API
     response = apiRequest("GET",
-                          "/api/v1/namespaces?labelSelector={}".format(config.managed_project_label))
+                          "/api/v1/namespaces?labelSelector={}={}".format(config.managed_project_label_name, config.managed_project_label_value))
 
     # return project names
     return {
@@ -274,6 +294,43 @@ def getUsername(token):
     except KeyError:
         abort("invalid user token", 400)
 
+def patch_quota(user_scheme, project, username, dry_run=False):
+
+    # validate user quota scheme
+    jsonschema.validate(instance=user_scheme, schema=config.schemas.quota)
+
+    patches = []
+        
+    # iterate quota objects
+    for quota_object_name in config.quota_scheme.keys():
+
+        parameters = {}
+
+        # iterate quota parameters
+        for quota_parameter_name in config.quota_scheme[quota_object_name].keys():
+
+            # append parameter
+            parameters[quota_parameter_name] = "{}{}".format(user_scheme[quota_object_name][quota_parameter_name]["value"], user_scheme[quota_object_name][quota_parameter_name]["units"])
+
+        # build new patch object
+        patches.append({
+            "name": quota_object_name,
+            "data": {
+                "spec": {
+                    "hard": parameters
+                }
+            }
+        })
+
+    # update each quota object separately
+    for patch in patches:
+        apiRequest( "PATCH",
+                    "/api/v1/namespaces/{}/resourcequotas/{}{}".format(project, patch["name"], "?dryRun=All" if dry_run else ""),
+                    json=patch["data"],
+                    contentType="application/strategic-merge-patch+json")
+        if not dry_run:
+            logger.info("user '{}' has updated the '{}' quota for project '{}': {}".format(username, patch["name"], project, patch["data"]["spec"]["hard"]))
+
 @app.route("/username", methods=["GET"])
 @authorization_not_required
 def getUsernameRoute():
@@ -286,10 +343,103 @@ def getProjects():
     # return jsonified project names
     return flask.jsonify(getProjectList())
 
-# TODO
 @app.route("/projects", methods=["POST"])
 def createProject():
+
+    # disabled for now
     return "", 501
+
+    # validate arguments
+    validateParams(flask.request.args, [ "newproject", "admin" ])
+
+    # ensure admin username and namespace name are valid
+    try:
+        jsonschema.validate(instance=flask.request.args["admin"], schema=config.schemas.username)
+        jsonschema.validate(instance=flask.request.args["newproject"], schema=config.schemas.namespace)
+    except jsonschema.ValidationError as error:
+        abort("'{}' is invalid: {}".format(error.instance, error.message), 400)
+
+    # helper variables
+    user_name = getUsername(flask.request.args["token"])
+    admin_user_name = config.format_username(flask.request.args["admin"])
+    new_project = flask.request.args["newproject"]
+
+    # dry run project creation, then do actual creation if no errors occurred
+    for dry_run in [
+        True,
+        False
+    ]:
+
+        # helper variables for current run
+        run_project = config.dry_run_namespace if dry_run else new_project
+        dry_run_query_param = "?dryRun=All" if dry_run else ""
+
+        # as it turns out, you can't dryRun a projectRequest because OpenShift
+        # therefore we only attempt creation when dryRun is false
+        if not dry_run:
+
+            # request project creation
+            apiRequest( "POST",
+                        "/apis/project.openshift.io/v1/projectrequests",
+                        json={
+                            "kind": "ProjectRequest",
+                            "apiVersion": "project.openshift.io/v1",
+                            "metadata": {
+                                "name": new_project
+                            }
+                        })
+
+            logger.info("user '{}' has created a project called '{}'".format(user_name, new_project))
+
+        # patch new project's quota
+        try:
+            patch_quota(flask.request.get_json(force=True), run_project, getUsername(flask.request.args["token"]), dry_run=dry_run)
+        except jsonschema.ValidationError as error:
+            abort("user provided scheme is invalid: {}".format(error.message), 400)
+
+        # label namespace with managed label
+        apiRequest( "PATCH",
+                    "/api/v1/namespaces/{}{}".format( run_project, dry_run_query_param),
+                    json={
+                        "metadata": {
+                            "labels": {
+                                config.managed_project_label_name: config.managed_project_label_value
+                            }
+                        }
+                    },
+                    contentType="application/strategic-merge-patch+json")
+
+        if not dry_run:
+            logger.info("user '{}' has labeled project '{}' as managed".format(user_name, new_project))
+
+        # assign admin to project
+        apiRequest( "POST",
+                    "/apis/authorization.openshift.io/v1/namespaces/{}/rolebindings{}".format(run_project, dry_run_query_param),
+                    json={
+                        "kind": "RoleBinding",
+                        "apiVersion": "authorization.openshift.io/v1",
+                        "metadata": {
+                            "name": "admin-{}".format(admin_user_name),
+                            "namespace": run_project
+                        },
+                        "roleRef": {
+                            "apiGroup": "rbac.authorization.k8s.io",
+                            "kind": "ClusterRole",
+                            "name": "admin"
+                        },
+                        "subjects": [
+                            {
+                                "apiGroup": "rbac.authorization.k8s.io",
+                                "kind": "User",
+                                "name": admin_user_name
+                            }
+                        ]
+                    })
+
+        if not dry_run:
+            logger.info("user '{}' has assigned '{}' as admin of project '{}'".format(user_name, admin_user_name, new_project))
+
+    return flask.jsonify({ "message": "project '{}' has been successfully created".format(new_project) }), 200
 
 @app.route("/healthz", methods=["GET"])
 @authorization_not_required
@@ -348,48 +498,11 @@ def setQuota():
     # validate arguments
     validateParams(flask.request.args, [ "project" ])
 
-    # get username
-    username = getUsername(flask.request.args["token"])
-
-    # get user quota scheme (throws 400 on error)
-    user_scheme = flask.request.get_json(force=True)
-
-    # validate user quota scheme
+    # try patching quota
     try:
-        jsonschema.validate(instance=user_scheme, schema=config.schemas.quota)
+        patch_quota(flask.request.get_json(force=True), flask.request.args["project"], getUsername(flask.request.args["token"]))
     except jsonschema.ValidationError as error:
         abort("user provided scheme is invalid: {}".format(error.message), 400)
-
-    patches = []
-        
-    # iterate quota objects
-    for quota_object_name in config.quota_scheme.keys():
-
-        parameters = {}
-
-        # iterate quota parameters
-        for quota_parameter_name in config.quota_scheme[quota_object_name].keys():
-
-            # append parameter
-            parameters[quota_parameter_name] = "{}{}".format(user_scheme[quota_object_name][quota_parameter_name]["value"], user_scheme[quota_object_name][quota_parameter_name]["units"])
-
-        # build new patch object
-        patches.append({
-            "name": quota_object_name,
-            "data": {
-                "spec": {
-                    "hard": parameters
-                }
-            }
-        })
-
-    # update each quota object separately
-    for patch in patches:
-        apiRequest( "PATCH",
-                    "/api/v1/namespaces/{}/resourcequotas/{}".format(flask.request.args["project"], patch["name"]),
-                    json=patch["data"],
-                    contentType="application/strategic-merge-patch+json")
-        logger.info("user '{}' has updated the following quota for project '{}': {}".format(username, flask.request.args["project"], patch))
 
     return flask.jsonify({ "message": "quota updated successfully for project '{}'".format(flask.request.args["project"]) }), 200
 

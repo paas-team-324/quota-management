@@ -82,6 +82,7 @@ objects:
     - namespaces
     verbs:
     - list
+    - patch
   - apiGroups:
     - ""
     resources:
@@ -97,6 +98,12 @@ objects:
     - ${QUOTA_MANAGERS_GROUP}
     verbs:
     - get
+  - apiGroups:
+    - project.openshift.io
+    resources:
+    - projectrequests
+    verbs:
+    - create
 - apiVersion: rbac.authorization.k8s.io/v1
   kind: ClusterRoleBinding
   metadata:
@@ -105,6 +112,18 @@ objects:
     apiGroup: rbac.authorization.k8s.io
     kind: ClusterRole
     name: quota-manager
+  subjects:
+  - kind: ServiceAccount
+    name: quota-manager
+    namespace: ${NAMESPACE}
+- apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRoleBinding
+  metadata:
+    name: quota-manager-admin
+  roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: ClusterRole
+    name: admin
   subjects:
   - kind: ServiceAccount
     name: quota-manager
@@ -181,10 +200,18 @@ objects:
           env:
           - name: QUOTA_SCHEME_FILE
             value: "/app/scheme.json"
-          - name: MANAGED_NAMESPACE_LABEL
-            value: "${MANAGED_NAMESPACE_LABEL}"
+          - name: MANAGED_NAMESPACE_LABEL_NAME
+            value: "${MANAGED_NAMESPACE_LABEL_NAME}"
+          - name: MANAGED_NAMESPACE_LABEL_VALUE
+            value: "${MANAGED_NAMESPACE_LABEL_VALUE}"
           - name: QUOTA_MANAGERS_GROUP
             value: "${QUOTA_MANAGERS_GROUP}"
+          - name: DRY_RUN_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: USERNAME_FORMATTING
+            value: "${USERNAME_FORMATTING}"
           volumeMounts:
           - name: scheme
             mountPath: "/app/scheme.json"
@@ -268,12 +295,20 @@ parameters:
 - description: Endpoint to use for authentication
   name: OAUTH_ENDPOINT
   required: true
-- description: Label which should be applied to managed namespaces
-  value: managed-quota=true
-  name: MANAGED_NAMESPACE_LABEL
+- description: Label name which should be applied to managed namespaces
+  value: managed-quota
+  name: MANAGED_NAMESPACE_LABEL_NAME
+  required: true
+- description: Label value which should be applied to managed namespaces
+  value: "true"
+  name: MANAGED_NAMESPACE_LABEL_VALUE
   required: true
 - description: Router's wildcard DNS record
   name: ROUTER_CANONICAL_HOSTNAME
+  required: true
+- description: During project creation, format username in order to append additional data (e.g. domain)
+  value: "{}"
+  name: USERNAME_FORMATTING
   required: true
 - description: Docker image to use for the UI
   value: docker.io/vladpbr/quota-management-client:1.1
