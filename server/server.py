@@ -191,9 +191,12 @@ logger = get_logger(config.name)
 app = flask.Flask(config.name)
 public_routes = []
 
+def format_response(message):
+    return { "message": message }
+
 def abort(message, code):
     logger.debug(message)
-    flask.abort(flask.make_response({ "message": message }, code ))
+    flask.abort(flask.make_response(format_response(message), code ))
 
 def api_request(method, uri, token=config.pod_token, params={}, json=None, contentType="application/json", dry_run=False):
 
@@ -444,7 +447,7 @@ def r_post_projects():
         if not dry_run:
             logger.info(f"user '{user_name}' has assigned '{admin_user_name}' as admin of project '{new_project}'")
 
-    return flask.jsonify({ "message": f"project '{new_project}' has been successfully created" }), 200
+    return flask.jsonify(format_response(f"project '{new_project}' has been successfully created")), 200
 
 @app.route("/healthz", methods=["GET"])
 @authorization_not_required
@@ -515,7 +518,7 @@ def r_put_quota():
     except jsonschema.ValidationError as error:
         abort(f"user provided scheme is invalid: {error.message}", 400)
 
-    return flask.jsonify({ "message": f"quota updated successfully for project '{flask.request.args['project']}'" }), 200
+    return flask.jsonify(format_response(f"quota updated successfully for project '{flask.request.args['project']}'")), 200
 
 if __name__ == "__main__":
     listener = ( "0.0.0.0", 5000 )
