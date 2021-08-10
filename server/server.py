@@ -195,7 +195,7 @@ def abort(message, code):
     logger.debug(message)
     flask.abort(flask.make_response({ "message": message }, code ))
 
-def api_request(method, uri, token=config.pod_token, json=None, contentType="application/json"):
+def api_request(method, uri, token=config.pod_token, params={}, json=None, contentType="application/json", dry_run=False):
 
     # make request
     try:
@@ -204,7 +204,7 @@ def api_request(method, uri, token=config.pod_token, json=None, contentType="app
             "Content-Type": contentType,
             "Accept": "application/json",
             "Connection": "close"
-        }, verify="/var/run/secrets/kubernetes.io/serviceaccount/ca.crt", json=json)
+        }, verify="/var/run/secrets/kubernetes.io/serviceaccount/ca.crt", json=json, params={ **params, **( { "dryRun": "All" } if dry_run else {} ) })
         response.raise_for_status()
 
     # error received from the API
@@ -243,7 +243,8 @@ def get_project_list():
 
     # query API
     response = api_request( "GET",
-                            "/api/v1/namespaces?labelSelector={}={}".format(config.managed_project_label_name, config.managed_project_label_value))
+                            "/api/v1/namespaces",
+                            params={ "labelSelector": "{}={}".format(config.managed_project_label_name, config.managed_project_label_value) })
 
     # return project names
     return {
@@ -326,9 +327,10 @@ def patch_quota(user_scheme, project, username, dry_run=False):
     # update each quota object separately
     for patch in patches:
         api_request("PATCH",
-                    "/api/v1/namespaces/{}/resourcequotas/{}{}".format(project, patch["name"], "?dryRun=All" if dry_run else ""),
+                    "/api/v1/namespaces/{}/resourcequotas/{}".format(project, patch["name"]),
                     json=patch["data"],
-                    contentType="application/strategic-merge-patch+json")
+                    contentType="application/strategic-merge-patch+json",
+                    dry_run=dry_run)
         if not dry_run:
             logger.info("user '{}' has updated the '{}' quota for project '{}': {}".format(username, patch["name"], project, patch["data"]["spec"]["hard"]))
 
@@ -348,7 +350,7 @@ def r_get_projects():
 def r_post_projects():
 
     # disabled for now
-    return "", 501
+    # return "", 501
 
     # validate arguments
     validate_params(flask.request.args, [ "newproject", "admin" ])
@@ -373,7 +375,6 @@ def r_post_projects():
 
         # helper variables for current run
         run_project = config.dry_run_namespace if dry_run else new_project
-        dry_run_query_param = "?dryRun=All" if dry_run else ""
 
         # as it turns out, you can't dryRun a projectRequest because OpenShift
         # therefore we only attempt creation when dryRun is false
@@ -400,7 +401,7 @@ def r_post_projects():
 
         # label namespace with managed label
         api_request("PATCH",
-                    "/api/v1/namespaces/{}{}".format( run_project, dry_run_query_param),
+                    "/api/v1/namespaces/{}".format(run_project),
                     json={
                         "metadata": {
                             "labels": {
@@ -408,14 +409,16 @@ def r_post_projects():
                             }
                         }
                     },
-                    contentType="application/strategic-merge-patch+json")
+                    contentType="application/strategic-merge-patch+json",
+                    dry_run=dry_run)
 
         if not dry_run:
             logger.info("user '{}' has labeled project '{}' as managed".format(user_name, new_project))
 
         # assign admin to project
         api_request("POST",
-                    "/apis/authorization.openshift.io/v1/namespaces/{}/rolebindings{}".format(run_project, dry_run_query_param),
+                    "/apis/authorization.openshift.io/v1/namespaces/{}/rolebindings".format(run_project),
+                    dry_run=dry_run,
                     json={
                         "kind": "RoleBinding",
                         "apiVersion": "authorization.openshift.io/v1",
