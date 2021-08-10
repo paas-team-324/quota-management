@@ -6,6 +6,7 @@ import logging
 import json
 import os
 import jsonschema
+from flask import g as request_context
 from kubernetes.utils.quantity import parse_quantity
 from gevent.pywsgi import WSGIServer, WSGIHandler
 from werkzeug.exceptions import BadRequest
@@ -319,6 +320,9 @@ def check_authorization():
     username = get_username(flask.request.args["token"])
     validate_quota_manager(username)
 
+    # add quota manager's username to current request context
+    request_context.username = username
+
 @app.after_request
 def after_request(response):
     response.headers['Access-Control-Allow-Origin'] = '*'
@@ -428,7 +432,6 @@ def r_post_projects():
         abort(f"'{error.instance}' is invalid: {error.message}", 400)
 
     # helper variables
-    user_name = get_username(flask.request.args["token"])
     admin_user_name = config.format_username(flask.request.args["admin"])
     new_project = flask.request.args["project"]
 
@@ -456,10 +459,10 @@ def r_post_projects():
                             }
                         })
 
-            logger.info(f"user '{user_name}' has created a project called '{new_project}'")
+            logger.info(f"user '{request_context.username}' has created a project called '{new_project}'")
 
         # patch new project's quota
-        patch_quota(get_request_json(flask.request), run_project, get_username(flask.request.args["token"]), dry_run=dry_run)
+        patch_quota(get_request_json(flask.request), run_project, request_context.username, dry_run=dry_run)
 
         # label namespace with managed label
         api_request("PATCH",
@@ -475,7 +478,7 @@ def r_post_projects():
                     dry_run=dry_run)
 
         if not dry_run:
-            logger.info(f"user '{user_name}' has labeled project '{new_project}' as managed")
+            logger.info(f"user '{request_context.username}' has labeled project '{new_project}' as managed")
 
         # assign admin to project
         api_request("POST",
@@ -503,7 +506,7 @@ def r_post_projects():
                     })
 
         if not dry_run:
-            logger.info(f"user '{user_name}' has assigned '{admin_user_name}' as admin of project '{new_project}'")
+            logger.info(f"user '{request_context.username}' has assigned '{admin_user_name}' as admin of project '{new_project}'")
 
     return flask.jsonify(format_response(f"project '{new_project}' has been successfully created")), 200
 
@@ -572,7 +575,7 @@ def r_put_quota():
     validate_namespace(flask.request.args['project'])
 
     # try patching quota
-    patch_quota(get_request_json(flask.request), flask.request.args["project"], get_username(flask.request.args["token"]))
+    patch_quota(get_request_json(flask.request), flask.request.args["project"], request_context.username)
 
     return flask.jsonify(format_response(f"quota updated successfully for project '{flask.request.args['project']}'")), 200
 
