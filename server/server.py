@@ -8,6 +8,7 @@ import os
 import jsonschema
 from kubernetes.utils.quantity import parse_quantity
 from gevent.pywsgi import WSGIServer
+from werkzeug.exceptions import BadRequest
 
 def get_logger(name):
 
@@ -244,6 +245,14 @@ def validate_namespace(namespace):
     if namespace not in get_project_list()["projects"]:
         abort(f"project '{namespace}' is not managed", 400)
 
+def get_request_json(request):
+
+    # try reading json body and take care of badrequest exception
+    try:
+        return request.get_json(force=True)
+    except BadRequest:
+        abort("invalid JSON data in request body", 400)
+
 def get_project_list():
 
     # query API
@@ -399,7 +408,7 @@ def r_post_projects():
 
         # patch new project's quota
         try:
-            patch_quota(flask.request.get_json(force=True), run_project, get_username(flask.request.args["token"]), dry_run=dry_run)
+            patch_quota(get_request_json(flask.request), run_project, get_username(flask.request.args["token"]), dry_run=dry_run)
         except jsonschema.ValidationError as error:
             abort(f"user provided scheme is invalid: {error.message}", 400)
 
@@ -514,7 +523,7 @@ def r_put_quota():
 
     # try patching quota
     try:
-        patch_quota(flask.request.get_json(force=True), flask.request.args["project"], get_username(flask.request.args["token"]))
+        patch_quota(get_request_json(flask.request), flask.request.args["project"], get_username(flask.request.args["token"]))
     except jsonschema.ValidationError as error:
         abort(f"user provided scheme is invalid: {error.message}", 400)
 
