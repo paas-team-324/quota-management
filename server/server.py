@@ -285,6 +285,11 @@ def after_request(response):
     response.headers['Access-Control-Allow-Methods'] = 'GET, PUT, POST'
     return response
 
+@app.errorhandler(500)
+def internal_server_error(error):
+    logger.error(error.original_exception)
+    return flask.jsonify(format_response(error.description)), 500
+
 def authorization_not_required(route):
     public_routes.append(route.__name__)
     return route
@@ -495,7 +500,7 @@ def r_get_quota():
             try:
                 value_decimal = parse_quantity(quota_object["spec"]["hard"][quota_parameter_name])
             except KeyError:
-                abort(f"quota parameter '{quota_parameter_name}' is not defined in '{quota_object_name}' resource quota in project '{flask.request.args['project']}'", 500)
+                abort(f"quota parameter '{quota_parameter_name}' is not defined in '{quota_object_name}' resource quota in project '{flask.request.args['project']}'", 502)
 
             # get desired units
             config_units = config.quota_scheme[quota_object_name][quota_parameter_name]["units"]
