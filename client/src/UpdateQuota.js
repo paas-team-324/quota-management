@@ -87,7 +87,7 @@ class UpdateQuota extends React.Component {
                         if (responseJSON["projects"].length == 0) {
 
                             this.setState({
-                                init_error: "there are no managed projects that exist in this cluster"
+                                init_error: "There are no managed projects that exist in this cluster"
                             })
                             
                         } else {

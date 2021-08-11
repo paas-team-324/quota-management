@@ -234,7 +234,7 @@ def route_to_path(route):
     return None
 
 def format_response(message):
-    return { "message": message }
+    return { "message": message.capitalize() }
 
 def abort(message, code):
     logger.debug(message)
