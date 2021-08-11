@@ -191,6 +191,8 @@ class Config:
         # parse environment vars
         try:
             self.name = name
+            self.oauth_endpoint = os.environ["OAUTH_ENDPOINT"]
+            self.oauth_client_id = os.environ["OAUTH_CLIENT_ID"]
             self.quota_scheme_path = os.environ["QUOTA_SCHEME_FILE"]
             self.managed_project_label_name = os.environ["MANAGED_NAMESPACE_LABEL_NAME"]
             self.managed_project_label_value = os.environ["MANAGED_NAMESPACE_LABEL_VALUE"]
@@ -220,7 +222,7 @@ class Config:
 
 config = None
 logger = None
-app = flask.Flask(__name__)
+app = flask.Flask(__name__, static_folder=None, template_folder='ui/templates')
 disable_auth_for_routes = []
 disable_logging_for_routes = []
 
@@ -254,7 +256,7 @@ def api_request(method, uri, params={}, json=None, contentType="application/json
 
     # error received from the API
     except requests.exceptions.HTTPError as error:
-        abort(error.response.json()['message'], error.response.status_code)
+        abort(error.response.json()['message'], 502)
 
     # error during the request itself
     except requests.exceptions.RequestException as error:
@@ -402,6 +404,25 @@ def patch_quota(user_scheme, project, username, dry_run=False):
                     dry_run=dry_run)
         if not dry_run:
             logger.info(f"user '{username}' has updated the '{patch['name']}' quota for project '{project}': {patch['data']['spec']['hard']}")
+
+# ========== UI ==========
+
+@app.route("/static/<path:filename>", methods=["GET"])
+@do_not_authorize
+def r_get_static(filename):
+    return flask.send_from_directory('ui/static', filename)
+
+@app.route("/<any('',favicon.ico):element>", methods=["GET"])
+@do_not_authorize
+def r_get_ui(element):
+    return flask.send_from_directory('ui', element or 'index.html')
+
+@app.route("/env.js", methods=["GET"])
+@do_not_authorize
+def r_get_env():
+    return flask.render_template('env.js', oauth_endpoint=config.oauth_endpoint, oauth_client_id=config.oauth_client_id)
+
+# ========== API =========
 
 @app.route("/username", methods=["GET"])
 @do_not_authorize
