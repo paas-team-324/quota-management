@@ -123,7 +123,7 @@ class App extends React.Component {
 											})
 										}}
 									>
-										<Tab label="Update Quota" icon={<EditIcon />} value={0}/>
+										<Tab label="Project Quota" icon={<EditIcon />} value={0}/>
 									</TabList>
 								</Paper>
 								<Paper square elevation={2} style={{ marginTop: '1%' }}>
