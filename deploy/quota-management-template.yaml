@@ -172,10 +172,6 @@ objects:
             value: "${MANAGED_NAMESPACE_LABEL_VALUE}"
           - name: QUOTA_MANAGERS_GROUP
             value: "${QUOTA_MANAGERS_GROUP}"
-          - name: DRY_RUN_NAMESPACE
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.namespace
           - name: USERNAME_FORMATTING
             value: "${USERNAME_FORMATTING}"
           volumeMounts:
@@ -251,7 +247,6 @@ parameters:
   value: docker.io/vladpbr/quota-management:1.1
   name: IMAGE
   required: true
-
 - description: Pull policy for the image
   value: IfNotPresent
   name: PULL_POLICY

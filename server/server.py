@@ -197,7 +197,6 @@ class Config:
             self.managed_project_label_name = os.environ["MANAGED_NAMESPACE_LABEL_NAME"]
             self.managed_project_label_value = os.environ["MANAGED_NAMESPACE_LABEL_VALUE"]
             self.quota_managers_group = os.environ["QUOTA_MANAGERS_GROUP"]
-            self.dry_run_namespace = os.environ["DRY_RUN_NAMESPACE"]
             self.username_formatting = os.environ["USERNAME_FORMATTING"]
         except KeyError as error:
             config_logger.critical(f"one of the environment variables is not defined: {error}")
@@ -439,9 +438,6 @@ def r_get_projects():
 @app.route("/projects", methods=["POST"])
 def r_post_projects():
 
-    # disabled for now
-    return "", 501
-
     # validate arguments
     validate_params(flask.request.args, [ "project", "admin" ])
 
@@ -456,78 +452,63 @@ def r_post_projects():
     admin_user_name = config.format_username(flask.request.args["admin"])
     new_project = flask.request.args["project"]
 
-    # dry run project creation, then do actual creation if no errors occurred
-    for dry_run in [
-        True,
-        False
-    ]:
+    # request project creation
+    api_request("POST",
+                "/apis/project.openshift.io/v1/projectrequests",
+                json={
+                    "kind": "ProjectRequest",
+                    "apiVersion": "project.openshift.io/v1",
+                    "metadata": {
+                        "name": new_project
+                    }
+                })
 
-        # helper variables for current run
-        run_project = config.dry_run_namespace if dry_run else new_project
+    logger.info(f"user '{request_context.username}' has created a project called '{new_project}'")
 
-        # as it turns out, you can't dryRun a projectRequest because OpenShift
-        # therefore we only attempt creation when dryRun is false
-        if not dry_run:
+    # patch new project's quota
+    patch_quota(get_request_json(flask.request), new_project, request_context.username, dry_run=False)
 
-            # request project creation
-            api_request("POST",
-                        "/apis/project.openshift.io/v1/projectrequests",
-                        json={
-                            "kind": "ProjectRequest",
-                            "apiVersion": "project.openshift.io/v1",
-                            "metadata": {
-                                "name": new_project
-                            }
-                        })
-
-            logger.info(f"user '{request_context.username}' has created a project called '{new_project}'")
-
-        # patch new project's quota
-        patch_quota(get_request_json(flask.request), run_project, request_context.username, dry_run=dry_run)
-
-        # label namespace with managed label
-        api_request("PATCH",
-                    f"/api/v1/namespaces/{run_project}",
-                    json={
-                        "metadata": {
-                            "labels": {
-                                config.managed_project_label_name: config.managed_project_label_value
-                            }
+    # label namespace with managed label
+    api_request("PATCH",
+                f"/api/v1/namespaces/{new_project}",
+                json={
+                    "metadata": {
+                        "labels": {
+                            config.managed_project_label_name: config.managed_project_label_value
                         }
+                    }
+                },
+                contentType="application/strategic-merge-patch+json",
+                dry_run=False)
+
+    logger.info(f"user '{request_context.username}' has labeled project '{new_project}' as managed")
+
+    # assign admin to project
+    api_request("POST",
+                f"/apis/authorization.openshift.io/v1/namespaces/{new_project}/rolebindings",
+                dry_run=False,
+                json={
+                    "kind": "RoleBinding",
+                    "apiVersion": "authorization.openshift.io/v1",
+                    "metadata": {
+                        "name": f"admin-{admin_user_name}",
+                        "namespace": new_project
                     },
-                    contentType="application/strategic-merge-patch+json",
-                    dry_run=dry_run)
-
-        if not dry_run:
-            logger.info(f"user '{request_context.username}' has labeled project '{new_project}' as managed")
-
-        # assign admin to project
-        api_request("POST",
-                    f"/apis/authorization.openshift.io/v1/namespaces/{run_project}/rolebindings",
-                    dry_run=dry_run,
-                    json={
-                        "kind": "RoleBinding",
-                        "apiVersion": "authorization.openshift.io/v1",
-                        "metadata": {
-                            "name": f"admin-{admin_user_name}",
-                            "namespace": run_project
-                        },
-                        "roleRef": {
+                    "roleRef": {
+                        "apiGroup": "rbac.authorization.k8s.io",
+                        "kind": "ClusterRole",
+                        "name": "admin"
+                    },
+                    "subjects": [
+                        {
                             "apiGroup": "rbac.authorization.k8s.io",
-                            "kind": "ClusterRole",
-                            "name": "admin"
-                        },
-                        "subjects": [
-                            {
-                                "apiGroup": "rbac.authorization.k8s.io",
-                                "kind": "User",
-                                "name": admin_user_name
-                            }
-                        ]
-                    })
+                            "kind": "User",
+                            "name": admin_user_name
+                        }
+                    ]
+                })
 
-        if not dry_run:
-            logger.info(f"user '{request_context.username}' has assigned '{admin_user_name}' as admin of project '{new_project}'")
+    logger.info(f"user '{request_context.username}' has assigned '{admin_user_name}' as admin of project '{new_project}'")
 
     return flask.jsonify(format_response(f"project '{new_project}' has been successfully created")), 200
 
