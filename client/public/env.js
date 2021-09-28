@@ -1,5 +1,0 @@
-window.ENV = {
-    "BACKEND_ROUTE": "${BACKEND_ROUTE}",
-    "OAUTH_ENDPOINT": "${OAUTH_ENDPOINT}",
-    "OAUTH_CLIENT_ID": "${OAUTH_CLIENT_ID}"
-}
