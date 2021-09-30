@@ -2,6 +2,7 @@ import React from 'react';
 import './App.css';
 import Auth from './Auth';
 import UpdateQuota from './UpdateQuota';
+import NewProject from './NewProject';
 import { Container, Toolbar, AppBar, Typography, Grid, Paper, Tab } from '@material-ui/core';
 import { Alert, TabContext, TabPanel, TabList } from '@material-ui/lab';
 import EditIcon from '@material-ui/icons/Edit';
@@ -123,12 +124,16 @@ class App extends React.Component {
 											})
 										}}
 									>
-										<Tab label="Project Quota" icon={<EditIcon />} value={0}/>
+										<Tab label="Edit Quota" icon={<EditIcon />} value={0}/>
+										<Tab label="New Project" icon={<EditIcon />} value={1}/>
 									</TabList>
 								</Paper>
 								<Paper square elevation={2} style={{ marginTop: '1%' }}>
 									<TabPanel value={0}>
 										<UpdateQuota request={this.request} addAlert={this.addAlert}></UpdateQuota>
+									</TabPanel>
+									<TabPanel value={1}>
+										<NewProject request={this.request} addAlert={this.addAlert}></NewProject>
 									</TabPanel>
 								</Paper>
 							</TabContext>
