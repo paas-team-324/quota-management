@@ -12,11 +12,14 @@ class App extends React.Component {
     constructor () {
         super();
 
+		let Validator = require('jsonschema').Validator
+
         this.state = {
 			authenticated: false,
             token: null,
 			username: null,
 			tab: 0,
+			validator: new Validator(),
 			alerts: []
         };
 
@@ -125,7 +128,7 @@ class App extends React.Component {
 										}}
 									>
 										<Tab label="Edit Quota" icon={<EditIcon />} value={0}/>
-										<Tab label="New Project" icon={<EditIcon />} value={1}/>
+										<Tab label="New Project" icon={<AddIcon />} value={1}/>
 									</TabList>
 								</Paper>
 								<Paper square elevation={2} style={{ marginTop: '1%' }}>
@@ -133,7 +136,7 @@ class App extends React.Component {
 										<UpdateQuota request={this.request} addAlert={this.addAlert}></UpdateQuota>
 									</TabPanel>
 									<TabPanel value={1}>
-										<NewProject request={this.request} addAlert={this.addAlert}></NewProject>
+										<NewProject request={this.request} addAlert={this.addAlert} validator={this.state.validator}></NewProject>
 									</TabPanel>
 								</Paper>
 							</TabContext>

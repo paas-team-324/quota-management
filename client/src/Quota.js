@@ -1,5 +1,5 @@
 import React from 'react';
-import { TextField, Grid, MenuItem, Box } from '@material-ui/core';
+import { TextField, Grid, MenuItem, Box, CircularProgress } from '@material-ui/core';
 
 class QuotaParameter extends React.Component {
 
@@ -138,19 +138,62 @@ class Quota extends React.Component {
         super(props);
 
         this.state = {
-            quota: JSON.parse(JSON.stringify(this.props.current)),
+            quota: null,
+            scheme: null,
             filled: true
         };
 
         this.edit = this.edit.bind(this)
     };
 
+    componentDidMount() {
+
+        this.props.request('GET', '/scheme', {}, {}, function(response, ok) {
+
+            let responseJSON = JSON.parse(response)
+
+            if (ok) {
+
+                let quota = {}
+
+                // if current was not provided, init a zero value quota
+                if (this.props.current == null) {
+
+                    for (const resourcequota_name in responseJSON) {
+                        quota[resourcequota_name] = {}
+                        for (const parameter_name in responseJSON[resourcequota_name]) {
+                            quota[resourcequota_name][parameter_name] = {}
+                            quota[resourcequota_name][parameter_name]["value"] = "0"
+                            quota[resourcequota_name][parameter_name]["units"] = Array.isArray(responseJSON[resourcequota_name][parameter_name]["units"]) ? responseJSON[resourcequota_name][parameter_name]["units"][0] : responseJSON[resourcequota_name][parameter_name]["units"]
+                        }
+                    }
+
+                } else {
+                    quota = JSON.parse(JSON.stringify(this.props.current))
+                }
+
+                this.setState({
+                    scheme: responseJSON,
+                    quota: quota,
+                    filled: true
+                }, function() {
+                    this.props.handleChange(this.state.quota, this.state.filled)
+                }.bind(this))
+
+            } else {
+                this.props.handleError(responseJSON["message"])
+            }
+
+        }.bind(this))
+
+    }
+
     edit(name, value) {
 
         let quota = this.state.quota
 
 		// if not all keys are set - remove from final output
-        if (Object.keys(value).length === Object.keys(this.props.scheme[name]).length) {
+        if (Object.keys(value).length === Object.keys(this.state.scheme[name]).length) {
             quota[name] = value
         } else {
             delete quota[name]
@@ -160,19 +203,27 @@ class Quota extends React.Component {
             quota: quota,
         })
 
-        let filled = (Object.keys(quota).length === Object.keys(this.props.scheme).length ? true : false)
+        let filled = (Object.keys(quota).length === Object.keys(this.state.scheme).length ? true : false)
         this.props.handleChange(quota, filled)
     }
 
     render() {
 
-        return Object.keys(this.props.scheme).map(quota_object_name =>
-            <Grid item xs={12 / Object.keys(this.props.scheme).length}>
-                <ResourceQuota
-                    name={quota_object_name}
-                    fields={this.props.scheme[quota_object_name]}
-                    edit={this.edit}
-                    current={this.props.current[quota_object_name]}></ResourceQuota>
+        return this.state.scheme != null ? (
+            Object.keys(this.state.scheme).map(quota_object_name =>
+                <Grid item xs={12 / Object.keys(this.state.scheme).length}>
+                    <ResourceQuota
+                        name={quota_object_name}
+                        fields={this.state.scheme[quota_object_name]}
+                        edit={this.edit}
+                        current={this.state.quota[quota_object_name]}></ResourceQuota>
+                </Grid>
+            )
+        ) : (
+            <Grid item xs={12}>
+                <div style={{display: 'flex', justifyContent:'center', alignItems:'center'}}>
+                    <CircularProgress />
+                </div>
             </Grid>
         )
 

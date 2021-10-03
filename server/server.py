@@ -113,7 +113,7 @@ class Config:
             namespace = \
             {
                 "type": "string",
-                "pattern": "(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?",
+                "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
                 "minLength": 2,
                 "maxLength": 63
             }
@@ -326,7 +326,7 @@ def check_authorization():
 
 @app.after_request
 def after_request(response):
-    response.headers['Access-Control-Allow-Origin'] = '*'
+    # response.headers['Access-Control-Allow-Origin'] = '*'
     response.headers['Access-Control-Allow-Methods'] = 'GET, PUT, POST'
     return response
 
@@ -422,6 +422,14 @@ def r_get_env():
     return flask.render_template('env.js', oauth_endpoint=config.oauth_endpoint, oauth_client_id=config.oauth_client_id)
 
 # ========== API =========
+
+@app.route("/validation/project", methods=["GET"])
+def r_get_validation_project():
+    return flask.jsonify(config.schemas.namespace)
+
+@app.route("/validation/username", methods=["GET"])
+def r_get_validation_username():
+    return flask.jsonify(config.schemas.username)
 
 @app.route("/username", methods=["GET"])
 @do_not_authorize
