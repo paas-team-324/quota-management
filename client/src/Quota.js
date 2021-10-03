@@ -50,7 +50,7 @@ class QuotaParameter extends React.Component {
                     />
                 </Grid>
                 { this.state.units !== "" &&
-                    <Grid item xs={2} style={{ paddingLeft: '2%' }}>
+                    <Grid item xs={2} style={{ paddingLeft: '2%', textAlign: "center" }}>
                         <TextField
                             id={this.props.parameter_name + "_units"}
                             name={this.props.parameter_name + "_units"}
@@ -65,6 +65,7 @@ class QuotaParameter extends React.Component {
                                     this.validate(this.state.value)
                                 })
                             }}
+                            inputProps={{ style: { textAlign: "center" } }}
                             InputProps={{
                                 readOnly: !Array.isArray(this.state.units),
                             }}

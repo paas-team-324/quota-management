@@ -3,8 +3,8 @@ import Quota from './Quota'
 import { Alert, AlertTitle } from '@material-ui/lab';
 import { Grid, Typography, Select, Button, CircularProgress } from '@material-ui/core';
 
-const update_button_idle = "Update Quota"
-const update_button_working = "Updating..."
+const update_button_idle = "Edit"
+const update_button_working = "Editing..."
 
 class UpdateQuota extends React.Component {
 
