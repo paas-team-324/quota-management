@@ -197,7 +197,6 @@ class Config:
             self.managed_project_label_name = os.environ["MANAGED_NAMESPACE_LABEL_NAME"]
             self.managed_project_label_value = os.environ["MANAGED_NAMESPACE_LABEL_VALUE"]
             self.quota_managers_group = os.environ["QUOTA_MANAGERS_GROUP"]
-            self.username_formatting = os.environ["USERNAME_FORMATTING"]
         except KeyError as error:
             config_logger.critical(f"one of the environment variables is not defined: {error}")
 
@@ -215,9 +214,6 @@ class Config:
 
         # generate schemas object
         self.schemas = self._Schemas(config_logger.name, self.quota_scheme)
-
-    def format_username(self, username):
-        return self.username_formatting.format(username)
 
 config = None
 logger = None
@@ -457,7 +453,7 @@ def r_post_projects():
         abort(f"'{error.instance}' is invalid: {error.message}", 400)
 
     # helper variables
-    admin_user_name = config.format_username(flask.request.args["admin"])
+    admin_user_name = flask.request.args["admin"]
     new_project = flask.request.args["project"]
 
     # request project creation

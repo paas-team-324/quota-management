@@ -239,10 +239,6 @@ parameters:
 - description: Router's wildcard DNS record
   name: ROUTER_CANONICAL_HOSTNAME
   required: true
-- description: During project creation, format username in order to append additional data (e.g. domain)
-  value: "{}"
-  name: USERNAME_FORMATTING
-  required: true
 - description: Docker image to use
   value: docker.io/vladpbr/quota-management:1.1
   name: IMAGE
