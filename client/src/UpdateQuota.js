@@ -3,8 +3,8 @@ import Quota from './Quota'
 import { Alert, AlertTitle } from '@material-ui/lab';
 import { Grid, Typography, Select, Button, CircularProgress } from '@material-ui/core';
 
-const update_button_idle = "Update Quota"
-const update_button_working = "Updating..."
+const update_button_idle = "Edit"
+const update_button_working = "Editing..."
 
 class UpdateQuota extends React.Component {
 
@@ -16,10 +16,9 @@ class UpdateQuota extends React.Component {
             init_error: null,
             project_loading: true,
             project_error: null,
-            scheme: null,
             quota: {},
             current_quota: null,
-            filled: true,
+            filled: false,
             project_list: [],
             project: null,
             update_button_text: update_button_idle,
@@ -66,49 +65,30 @@ class UpdateQuota extends React.Component {
 
     componentDidMount() {
 
-        // request quota scheme
-        this.props.request('GET', '/scheme', {}, {}, function(response, ok) {
+        // request project list
+        this.props.request('GET', '/projects', {}, {}, function(response, ok) {
 
             let responseJSON = JSON.parse(response)
 
             if (ok) {
 
-                this.setState({
-                    scheme: responseJSON
-                })
+                if (responseJSON["projects"].length == 0) {
 
-                // request project list
-                this.props.request('GET', '/projects', {}, {}, function(response, ok) {
+                    this.setState({
+                        init_error: "There are no managed projects that exist in this cluster"
+                    })
+                    
+                } else {
 
-                    let responseJSON = JSON.parse(response)
+                    // store list in state, then change to first project in list
+                    this.setState({
+                        project_list: responseJSON["projects"],
+                        init_loading: false
+                    }, function() {
+                        this.changeProject(this.state.project_list[0])
+                    })
 
-                    if (ok) {
-
-                        if (responseJSON["projects"].length == 0) {
-
-                            this.setState({
-                                init_error: "There are no managed projects that exist in this cluster"
-                            })
-                            
-                        } else {
-
-                            // store list in state, then change to first project in list
-                            this.setState({
-                                project_list: responseJSON["projects"],
-                                init_loading: false
-                            }, function() {
-                                this.changeProject(this.state.project_list[0])
-                            })
-
-                        }
-
-                    } else {
-                        this.setState({
-                            init_error: responseJSON["message"]
-                        })
-                    }
-
-                }.bind(this))
+                }
 
             } else {
                 this.setState({
@@ -193,12 +173,16 @@ class UpdateQuota extends React.Component {
 
                                             ) : (
 
-                                                <Quota scheme={this.state.scheme} handleChange={(quota, filled) => {
+                                                <Quota request={this.props.request} handleChange={(quota, filled) => {
                                                     this.setState({
                                                             quota: quota,
                                                             filled: filled
                                                     })
-                                                }} current={this.state.current_quota}></Quota>
+                                                }} handleError={(error) => {
+                                                    this.setState({
+                                                        init_error: error
+                                                    })
+                                                }} current={this.state.current_quota} validator={this.props.validator}></Quota>
 
                                             )
 

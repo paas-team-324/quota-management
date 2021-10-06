@@ -9,15 +9,15 @@ RUN npm run build
 
 FROM docker.io/library/python:3.9-slim
 
-# transfer build
+# set-up backend
 EXPOSE 5000
 WORKDIR /app
-COPY --from=build /build/build ./ui
-
-# python dependencies
 COPY server/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
+COPY server/server.py ./
+
+# transfer ui build
+COPY --from=build /build/build ./ui
 
 # run server
-COPY server/server.py ./
 CMD [ "./server.py" ]
