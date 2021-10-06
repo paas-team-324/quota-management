@@ -101,14 +101,9 @@ class ResourceQuota extends React.Component {
 
         let quota = this.state.quota
 
-        // if empty - remove from quota
-        if (value === '') {
-            delete quota[name]
-        } else {
-            quota[name] = {
-                "value": value,
-                "units": units,
-            }
+        quota[name] = {
+            "value": value,
+            "units": units,
         }
 
         this.setState({
@@ -140,17 +135,23 @@ class Quota extends React.Component {
         this.state = {
             quota: null,
             scheme: null,
-            filled: true
+            validation: null,
+            validation_errors: null
         };
 
         this.edit = this.edit.bind(this)
+        this.validate = this.validate.bind(this)
     };
+
+    validate(quota, schema) {
+        return this.props.validator.validate(quota, schema).errors.map((error) => "* " + error.message).join("\n")
+    }
 
     componentDidMount() {
 
         this.props.request('GET', '/scheme', {}, {}, function(response, ok) {
 
-            let responseJSON = JSON.parse(response)
+            let scheme = JSON.parse(response)
 
             if (ok) {
 
@@ -159,12 +160,12 @@ class Quota extends React.Component {
                 // if current was not provided, init a zero value quota
                 if (this.props.current == null) {
 
-                    for (const resourcequota_name in responseJSON) {
+                    for (const resourcequota_name in scheme) {
                         quota[resourcequota_name] = {}
-                        for (const parameter_name in responseJSON[resourcequota_name]) {
+                        for (const parameter_name in scheme[resourcequota_name]) {
                             quota[resourcequota_name][parameter_name] = {}
                             quota[resourcequota_name][parameter_name]["value"] = "0"
-                            quota[resourcequota_name][parameter_name]["units"] = Array.isArray(responseJSON[resourcequota_name][parameter_name]["units"]) ? responseJSON[resourcequota_name][parameter_name]["units"][0] : responseJSON[resourcequota_name][parameter_name]["units"]
+                            quota[resourcequota_name][parameter_name]["units"] = Array.isArray(scheme[resourcequota_name][parameter_name]["units"]) ? scheme[resourcequota_name][parameter_name]["units"][0] : scheme[resourcequota_name][parameter_name]["units"]
                         }
                     }
 
@@ -172,16 +173,30 @@ class Quota extends React.Component {
                     quota = JSON.parse(JSON.stringify(this.props.current))
                 }
 
-                this.setState({
-                    scheme: responseJSON,
-                    quota: quota,
-                    filled: true
-                }, function() {
-                    this.props.handleChange(this.state.quota, this.state.filled)
-                }.bind(this))
+                // fetch validation schema
+                this.props.request('GET', '/validation/scheme', {}, {}, function(response, ok) {
 
+                    let validation = JSON.parse(response)
+
+                    if (ok) {
+
+                        this.setState({
+                            scheme: scheme,
+                            quota: quota,
+                            validation: validation,
+                            validation_errors: this.validate(quota, validation)
+                        }, function() {
+                            this.props.handleChange(this.state.quota, this.state.validation_errors === "")
+                        }.bind(this))
+
+                    } else {
+                        this.props.handleError(validation["message"])
+                    }
+
+                }.bind(this))
+                
             } else {
-                this.props.handleError(responseJSON["message"])
+                this.props.handleError(scheme["message"])
             }
 
         }.bind(this))
@@ -192,24 +207,19 @@ class Quota extends React.Component {
 
         let quota = this.state.quota
 
-		// if not all keys are set - remove from final output
-        if (Object.keys(value).length === Object.keys(this.state.scheme[name]).length) {
-            quota[name] = value
-        } else {
-            delete quota[name]
-        }
+        quota[name] = value
 
         this.setState({
             quota: quota,
+            validation_errors: this.validate(quota, this.state.validation)
+        }, function() {
+            this.props.handleChange(this.state.quota, this.state.validation_errors === "")
         })
-
-        let filled = (Object.keys(quota).length === Object.keys(this.state.scheme).length ? true : false)
-        this.props.handleChange(quota, filled)
     }
 
     render() {
 
-        return this.state.scheme != null ? (
+        return this.state.validation != null ? (
             Object.keys(this.state.scheme).map(quota_object_name =>
                 <Grid item xs={12 / Object.keys(this.state.scheme).length}>
                     <ResourceQuota

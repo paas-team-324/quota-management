@@ -8,18 +8,19 @@ import { Alert, TabContext, TabPanel, TabList } from '@material-ui/lab';
 import EditIcon from '@material-ui/icons/Edit';
 import AddIcon from '@material-ui/icons/Add';
 
+// jsonschema validator
+let Validator = require('jsonschema').Validator
+const validator = new Validator
+
 class App extends React.Component {
     constructor () {
         super();
-
-		let Validator = require('jsonschema').Validator
 
         this.state = {
 			authenticated: false,
             token: null,
 			username: null,
 			tab: 0,
-			validator: new Validator(),
 			alerts: []
         };
 
@@ -133,10 +134,10 @@ class App extends React.Component {
 								</Paper>
 								<Paper square elevation={2} style={{ marginTop: '1%' }}>
 									<TabPanel value={0}>
-										<UpdateQuota request={this.request} addAlert={this.addAlert}></UpdateQuota>
+										<UpdateQuota request={this.request} addAlert={this.addAlert} validator={validator}></UpdateQuota>
 									</TabPanel>
 									<TabPanel value={1}>
-										<NewProject request={this.request} addAlert={this.addAlert} validator={this.state.validator}></NewProject>
+										<NewProject request={this.request} addAlert={this.addAlert} validator={validator}></NewProject>
 									</TabPanel>
 								</Paper>
 							</TabContext>

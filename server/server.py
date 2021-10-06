@@ -427,6 +427,10 @@ def r_get_validation_project():
 def r_get_validation_username():
     return flask.jsonify(config.schemas.username)
 
+@app.route("/validation/scheme", methods=["GET"])
+def r_get_validation_quota():
+    return flask.jsonify(config.schemas.quota)
+
 @app.route("/username", methods=["GET"])
 @do_not_authorize
 def r_get_username():
