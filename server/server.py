@@ -6,6 +6,7 @@ import logging
 import json
 import os
 import jsonschema
+import re
 from flask import g as request_context
 from kubernetes.utils.quantity import parse_quantity
 from gevent.pywsgi import WSGIServer, WSGIHandler
@@ -297,8 +298,9 @@ def get_project_list():
 
     # prepare unique list of projects with quota objects
     projects = []
+    infra_projects_regex = r"(^openshift-|^kube-|^openshift$|^default$)"
     for resourcequota in response.json()["items"]:
-        if resourcequota["metadata"]["namespace"] not in projects:
+        if resourcequota["metadata"]["namespace"] not in projects and not re.match(infra_projects_regex, resourcequota["metadata"]["namespace"]):
             projects.append(resourcequota["metadata"]["namespace"])
 
     # return project names
