@@ -82,7 +82,6 @@ objects:
     - namespaces
     verbs:
     - list
-    - patch
   - apiGroups:
     - ""
     resources:
@@ -166,10 +165,6 @@ objects:
             value: "${CLIENT_ID}"
           - name: QUOTA_SCHEME_FILE
             value: "/app/scheme.json"
-          - name: MANAGED_NAMESPACE_LABEL_NAME
-            value: "${MANAGED_NAMESPACE_LABEL_NAME}"
-          - name: MANAGED_NAMESPACE_LABEL_VALUE
-            value: "${MANAGED_NAMESPACE_LABEL_VALUE}"
           - name: QUOTA_MANAGERS_GROUP
             value: "${QUOTA_MANAGERS_GROUP}"
           - name: USERNAME_FORMATTING
@@ -227,14 +222,6 @@ parameters:
   required: true
 - description: Endpoint to use for authentication
   name: OAUTH_ENDPOINT
-  required: true
-- description: Label name which should be applied to managed namespaces
-  value: managed-quota
-  name: MANAGED_NAMESPACE_LABEL_NAME
-  required: true
-- description: Label value which should be applied to managed namespaces
-  value: "true"
-  name: MANAGED_NAMESPACE_LABEL_VALUE
   required: true
 - description: Router's wildcard DNS record
   name: ROUTER_CANONICAL_HOSTNAME

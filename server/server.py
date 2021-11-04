@@ -194,8 +194,6 @@ class Config:
             self.oauth_endpoint = os.environ["OAUTH_ENDPOINT"]
             self.oauth_client_id = os.environ["OAUTH_CLIENT_ID"]
             self.quota_scheme_path = os.environ["QUOTA_SCHEME_FILE"]
-            self.managed_project_label_name = os.environ["MANAGED_NAMESPACE_LABEL_NAME"]
-            self.managed_project_label_value = os.environ["MANAGED_NAMESPACE_LABEL_VALUE"]
             self.quota_managers_group = os.environ["QUOTA_MANAGERS_GROUP"]
         except KeyError as error:
             config_logger.critical(f"one of the environment variables is not defined: {error}")
@@ -294,14 +292,20 @@ def get_request_json(request):
 def get_project_list():
 
     # query API
-    response = api_request( "GET",
-                            "/api/v1/namespaces",
-                            params={ "labelSelector": f"{config.managed_project_label_name}={config.managed_project_label_value}" })
+    response = api_request(  "GET",
+                            "/api/v1/resourcequotas")
+
+    # prepare unique list of projects with quota objects
+    projects = []
+    for resourcequota in response.json()["items"]:
+        if resourcequota["metadata"]["namespace"] not in projects:
+            projects.append(resourcequota["metadata"]["namespace"])
 
     # return project names
     return {
-        "projects": [ namespace["metadata"]["name"] for namespace in response.json()["items"] ]
+        "projects": projects
     }
+
 
 @app.before_request
 def check_authorization():
@@ -475,21 +479,6 @@ def r_post_projects():
 
     # patch new project's quota
     patch_quota(get_request_json(flask.request), new_project, request_context.username, dry_run=False)
-
-    # label namespace with managed label
-    api_request("PATCH",
-                f"/api/v1/namespaces/{new_project}",
-                json={
-                    "metadata": {
-                        "labels": {
-                            config.managed_project_label_name: config.managed_project_label_value
-                        }
-                    }
-                },
-                contentType="application/strategic-merge-patch+json",
-                dry_run=False)
-
-    logger.info(f"user '{request_context.username}' has labeled project '{new_project}' as managed")
 
     # assign admin to project
     api_request("POST",
