@@ -167,8 +167,6 @@ objects:
             value: "/app/scheme.json"
           - name: QUOTA_MANAGERS_GROUP
             value: "${QUOTA_MANAGERS_GROUP}"
-          - name: USERNAME_FORMATTING
-            value: "${USERNAME_FORMATTING}"
           volumeMounts:
           - name: scheme
             mountPath: "/app/scheme.json"
