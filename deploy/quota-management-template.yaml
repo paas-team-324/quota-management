@@ -79,12 +79,6 @@ objects:
   - apiGroups:
     - ""
     resources:
-    - namespaces
-    verbs:
-    - list
-  - apiGroups:
-    - ""
-    resources:
     - resourcequotas
     verbs:
     - get
