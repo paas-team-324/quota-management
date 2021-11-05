@@ -1,6 +1,11 @@
 import React from 'react';
 import { TextField, Grid, MenuItem, Box, CircularProgress } from '@material-ui/core';
 
+const DATA_TYPE_DESCRIPTIONS = {
+    "int": "Whole non-negative number",
+    "float": "Floating point non-negative number"
+}
+
 class QuotaParameter extends React.Component {
 
     constructor(props) {
@@ -9,8 +14,6 @@ class QuotaParameter extends React.Component {
         this.state = {
             name: this.props.parameter["name"],
             units: this.props.parameter["units"],
-            regex: new RegExp(this.props.parameter["regex"]),
-            regex_description: this.props.parameter["regex_description"],
 
             value: this.props.current["value"],
             selected_units: this.props.current["units"]
@@ -20,9 +23,9 @@ class QuotaParameter extends React.Component {
     };
 
     validate(value) {
- 
-        // test input with regex
-        if (value === '' || this.state.regex.test(value)) {
+
+        // test input with schema
+        if (value === '' || this.props.validator.validate(value, this.props.validation).errors.length == 0) {
 
             // set field text
             this.setState({
@@ -43,7 +46,7 @@ class QuotaParameter extends React.Component {
                         id={this.props.parameter_name}
                         name={this.props.parameter_name}
                         label={this.state.name}
-                        helperText={this.state.regex_description}
+                        helperText={DATA_TYPE_DESCRIPTIONS[this.props.parameter["type"]]}
                         value={this.state.value}
                         onChange={event => this.validate(event.target.value)}
                         fullWidth
@@ -119,6 +122,8 @@ class ResourceQuota extends React.Component {
             <QuotaParameter
                 parameter_name={parameter_name}
                 parameter={this.props.fields[parameter_name]}
+                validation={this.props.validation["properties"][parameter_name]["properties"]["value"]}
+                validator={this.props.validator}
                 edit={this.edit}
                 current={this.props.current[parameter_name]}></QuotaParameter>
         )
@@ -225,6 +230,8 @@ class Quota extends React.Component {
                     <ResourceQuota
                         name={quota_object_name}
                         fields={this.state.scheme[quota_object_name]}
+                        validation={this.state.validation["properties"][quota_object_name]}
+                        validator={this.props.validator}
                         edit={this.edit}
                         current={this.state.quota[quota_object_name]}></ResourceQuota>
                 </Grid>

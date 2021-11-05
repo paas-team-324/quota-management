@@ -79,7 +79,7 @@ class Config:
                         "additionalProperties": {
                             "type": "object",
                             "additionalProperties": False,
-                            "required": [ "name", "units", "regex", "regex_description" ],
+                            "required": [ "name", "units", "type" ],
                             "properties": {
                                 "name": { "type": "string" },
                                 "units": {
@@ -95,8 +95,7 @@ class Config:
                                         }
                                     ]
                                 },
-                                "regex": { "type": "string" },
-                                "regex_description": { "type": "string" }
+                                "type": { "type": "string", "enum": [ "int", "float" ] },
                             }
                         }
                     }
@@ -117,6 +116,13 @@ class Config:
                 "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
                 "minLength": 2,
                 "maxLength": 63
+            }
+
+            # valid data types for quota params
+            data_types = \
+            {
+                "int" : "^\\d+$",
+                "float": "^\\d*\\.?\\d*$"
             }
 
             def __init__(self, name, quota):
@@ -169,7 +175,7 @@ class Config:
                             "additionalProperties": False,
                             "required": [ "value", "units" ],
                             "properties": {
-                                "value": { "type": "string", "pattern": quota[quota_object_name][quota_parameter_name]["regex"] },
+                                "value": { "type": "string", "pattern":  self.data_types[quota[quota_object_name][quota_parameter_name]["type"]] },
                                 "units": { "type": "string", "enum": valid_units if isinstance(valid_units, list) else [ valid_units ] }
                             }
                         }

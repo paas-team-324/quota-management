@@ -29,34 +29,29 @@ objects:
               "pods": {
                   "name": "Pods",
                   "units": "",
-                  "regex": "^\\d+$",
-                  "regex_description": "Must be a whole non-negative number"
+                  "type": "int"
               },
               "requests.cpu": {
                   "name": "CPU Cores",
                   "units": "",
-                  "regex": "^\\d*\\.?\\d*$",
-                  "regex_description": "Must be a floating point non-negative number"
+                  "type": "float"
               },
               "requests.memory": {
                   "name": "Memory",
                   "units": [ "Gi", "Mi" ],
-                  "regex": "^\\d*\\.?\\d*$",
-                  "regex_description": "Must be a floating point non-negative number"
+                  "type": "float"
               }
           },
           "storage": {
               "requests.storage": {
                   "name": "Storage",
                   "units": "Gi",
-                  "regex": "^\\d*\\.?\\d*$",
-                  "regex_description": "Must be a floating point non-negative number"
+                  "type": "float"
               },
               "persistentvolumeclaims": {
                   "name": "Persistent Volume Claims",
                   "units": "",
-                  "regex": "^\\d+$",
-                  "regex_description": "Must be a whole non-negative number"
+                  "type": "int"
               }
           }
       }
