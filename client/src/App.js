@@ -4,7 +4,7 @@ import Auth from './Auth';
 import UpdateQuota from './UpdateQuota';
 import NewProject from './NewProject';
 import { Container, Toolbar, AppBar, Typography, Grid, Paper, Tab } from '@material-ui/core';
-import { Alert, TabContext, TabPanel, TabList } from '@material-ui/lab';
+import { Alert, TabContext, TabPanel, TabList, AlertTitle } from '@material-ui/lab';
 import EditIcon from '@material-ui/icons/Edit';
 import AddIcon from '@material-ui/icons/Add';
 
@@ -20,19 +20,57 @@ class App extends React.Component {
 			authenticated: false,
             token: null,
 			username: null,
+			clusters: [],
+			cluster: null,
+			error: null,
 			tab: 0,
 			alerts: []
         };
 
+		this.update_clusters_list = this.update_clusters_list.bind(this)
 		this.request = this.request.bind(this)
 		this.addAlert = this.addAlert.bind(this)
 		this.closeAlert = this.closeAlert.bind(this)
     };
 
+	update_clusters_list() {
+
+		// fetch cluster names
+		this.request('GET', '/clusters', {}, {}, function(response, ok) {
+
+			let clusters = JSON.parse(response)
+
+			if (ok) {
+
+				// make sure there are any clusters
+				if (clusters.length == 0) {
+					this.setState({
+						error: "There are no available clusters"
+					})
+				} else {
+					this.setState({
+						clusters: clusters,
+						cluster: clusters[0]
+					})
+				}
+
+			} else {
+				this.setState({
+					error: clusters["message"]
+				})
+			}
+
+		}.bind(this))
+
+	}
+
 	request(method, uri, query_params, data, callback) {
 
-		// add auth token to query params
+		// add auth token and cluster to query params
 		query_params["token"] = this.state.token
+		if (this.state.cluster != null) {
+			query_params["cluster"] = this.state.cluster
+		}
 
 		// prepare xhr request
 		let xhr_request = new XMLHttpRequest()
@@ -116,31 +154,46 @@ class App extends React.Component {
 					}}>
 						{this.state.authenticated ? (
 							
-							<TabContext value={this.state.tab}>
-								<Paper square elevation={2}>
-									<TabList
-										indicatorColor="primary"
-										textColor="primary"
-										variant="fullWidth"
-										onChange={(event, newValue) => {
-											this.setState({
-												tab: newValue
-											})
-										}}
-									>
-										<Tab label="Edit Quota" icon={<EditIcon />} value={0}/>
-										<Tab label="New Project" icon={<AddIcon />} value={1}/>
-									</TabList>
-								</Paper>
-								<Paper square elevation={2} style={{ marginTop: '1%' }}>
-									<TabPanel value={0}>
-										<UpdateQuota request={this.request} addAlert={this.addAlert} validator={validator}></UpdateQuota>
-									</TabPanel>
-									<TabPanel value={1}>
-										<NewProject request={this.request} addAlert={this.addAlert} validator={validator}></NewProject>
-									</TabPanel>
-								</Paper>
-							</TabContext>
+							<div>
+
+								{this.state.error == null ? (
+
+									<TabContext value={this.state.tab}>
+										<Paper square elevation={2}>
+											<TabList
+												indicatorColor="primary"
+												textColor="primary"
+												variant="fullWidth"
+												onChange={(event, newValue) => {
+													this.setState({
+														tab: newValue
+													})
+												}}
+											>
+												<Tab label="Edit Quota" icon={<EditIcon />} value={0}/>
+												<Tab label="New Project" icon={<AddIcon />} value={1}/>
+											</TabList>
+										</Paper>
+										<Paper square elevation={2} style={{ marginTop: '1%' }}>
+											<TabPanel value={0}>
+												<UpdateQuota request={this.request} addAlert={this.addAlert} validator={validator}></UpdateQuota>
+											</TabPanel>
+											<TabPanel value={1}>
+												<NewProject request={this.request} addAlert={this.addAlert} validator={validator}></NewProject>
+											</TabPanel>
+										</Paper>
+									</TabContext>
+
+								) : (
+									<Grid item xs={12}>
+										<Alert severity="error">
+											<AlertTitle>Error</AlertTitle>
+											{this.state.error}
+										</Alert>
+                                    </Grid>
+								)}
+
+							</div>
 
 						) : (
 							<Auth finishAuthentication={(token, username) => {
@@ -148,7 +201,9 @@ class App extends React.Component {
 									authenticated: true,
 									username: username,
 									token: token
-								})
+								}, function() {
+									this.update_clusters_list()
+								}.bind(this))
 							}}></Auth>
 						)}
 

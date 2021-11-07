@@ -3,7 +3,7 @@ kind: Template
 metadata:
   name: quota-management
   annotations:
-    description: "OpenShift application for easy management of resources for projects located within the deployed cluster."
+    description: "OpenShift application for easy management of resources for projects located across multiple clusters."
 objects:
 - apiVersion: oauth.openshift.io/v1
   grantMethod: auto
@@ -56,14 +56,21 @@ objects:
           }
       }
 - apiVersion: v1
+  kind: Secret
+  metadata:
+    name: clusters
+    namespace: ${NAMESPACE}
+  stringData:
+    local: '{"api":"https://kubernetes.default.svc:443","token":""}'
+- apiVersion: v1
   kind: ServiceAccount
   metadata:
-    name: quota-manager
+    name: quota-management
     namespace: ${NAMESPACE}
 - apiVersion: rbac.authorization.k8s.io/v1
   kind: ClusterRole
   metadata:
-    name: quota-manager
+    name: quota-management
   rules:
   - apiGroups:
     - authentication.k8s.io
@@ -72,13 +79,6 @@ objects:
     verbs:
     - create
   - apiGroups:
-    - ""
-    resources:
-    - resourcequotas
-    verbs:
-    - get
-    - patch
-  - apiGroups:
     - user.openshift.io
     resources:
     - groups
@@ -86,35 +86,17 @@ objects:
     - ${QUOTA_MANAGERS_GROUP}
     verbs:
     - get
-  - apiGroups:
-    - project.openshift.io
-    resources:
-    - projectrequests
-    verbs:
-    - create
 - apiVersion: rbac.authorization.k8s.io/v1
   kind: ClusterRoleBinding
   metadata:
-    name: quota-manager
+    name: quota-management
   roleRef:
     apiGroup: rbac.authorization.k8s.io
     kind: ClusterRole
-    name: quota-manager
+    name: quota-management
   subjects:
   - kind: ServiceAccount
-    name: quota-manager
-    namespace: ${NAMESPACE}
-- apiVersion: rbac.authorization.k8s.io/v1
-  kind: ClusterRoleBinding
-  metadata:
-    name: quota-manager-admin
-  roleRef:
-    apiGroup: rbac.authorization.k8s.io
-    kind: ClusterRole
-    name: admin
-  subjects:
-  - kind: ServiceAccount
-    name: quota-manager
+    name: quota-management
     namespace: ${NAMESPACE}
 - apiVersion: apps/v1
   kind: Deployment
@@ -133,7 +115,7 @@ objects:
         labels:
           app: quota-management
       spec:
-        serviceAccountName: quota-manager
+        serviceAccountName: quota-management
         containers:
         - name: quota-management
           image: ${IMAGE}
@@ -154,6 +136,8 @@ objects:
             value: "${CLIENT_ID}"
           - name: QUOTA_SCHEME_FILE
             value: "/app/scheme.json"
+          - name: CLUSTERS_DIR
+            value: "/app/clusters"
           - name: QUOTA_MANAGERS_GROUP
             value: "${QUOTA_MANAGERS_GROUP}"
           volumeMounts:
@@ -161,11 +145,17 @@ objects:
             mountPath: "/app/scheme.json"
             subPath: "scheme.json"
             readOnly: true
+          - name: clusters
+            mountPath: "/app/clusters"
+            readOnly: true
           imagePullPolicy: "${PULL_POLICY}"
         volumes:
         - name: scheme
           configMap:
             name: quota-scheme
+        - name: clusters
+          secret:
+            secretName: clusters
 - apiVersion: v1
   kind: Service
   metadata:

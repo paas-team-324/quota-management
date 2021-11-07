@@ -102,6 +102,18 @@ class Config:
                 }
             }
 
+            # cluster credentials file
+            cluster_file = \
+            {
+                "type": "object",
+                "additionalProperties": False,
+                "required": [ "api", "token" ],
+                "properties": {
+                    "api": { "type": "string" },
+                    "token": { "type": "string" }
+                }
+            }
+
             # user object name validation
             username = \
             {
@@ -201,6 +213,7 @@ class Config:
             self.oauth_endpoint = os.environ["OAUTH_ENDPOINT"]
             self.oauth_client_id = os.environ["OAUTH_CLIENT_ID"]
             self.quota_scheme_path = os.environ["QUOTA_SCHEME_FILE"]
+            self.clusters_dir = os.environ["CLUSTERS_DIR"]
             self.quota_managers_group = os.environ["QUOTA_MANAGERS_GROUP"]
         except KeyError as error:
             config_logger.critical(f"one of the environment variables is not defined: {error}")
@@ -219,6 +232,32 @@ class Config:
 
         # generate schemas object
         self.schemas = self._Schemas(config_logger.name, self.quota_scheme)
+
+        # ensure clusters dir exists
+        if not os.path.exists(self.clusters_dir):
+            config_logger.critical(f"clusters directory is not present at '{self.clusters_dir}'")
+
+        # parse clusters
+        self.clusters = {}
+        for cluster in os.listdir(self.clusters_dir):
+
+            # ignore hidden files
+            if not cluster.startswith("."):
+
+                try:
+                    with open(os.path.join(self.clusters_dir, cluster)) as cluster_file:
+                        
+                        # read, validate and store
+                        cluster_json = json.loads(cluster_file.read())
+                        jsonschema.validate(instance=cluster_json, schema=self.schemas.cluster_file)
+                        self.clusters[cluster] = cluster_json
+
+                except json.JSONDecodeError as error:
+                    config_logger.critical(f"could not parse '{cluster}' cluster file: {error}")
+                except jsonschema.ValidationError as error:
+                    config_logger.critical(f"'{cluster}' cluster file does not conform to schema: {error}")
+
+        config_logger.info(f"{len(self.clusters)} clusters registered")
 
 config = None
 logger = None
@@ -242,12 +281,20 @@ def abort(message, code):
     logger.debug(message)
     flask.abort(flask.make_response(format_response(message), code ))
 
-def api_request(method, uri, params={}, json=None, contentType="application/json", dry_run=False):
+def api_request(method, uri, params={}, json=None, contentType="application/json", dry_run=False, local=False):
+
+    # distinguish between local and remote request
+    if local:
+        api = "https://kubernetes.default.svc:443"
+        token = config.pod_token
+    else:
+        api = config.clusters[request_context.cluster]['api']
+        token = config.clusters[request_context.cluster]['token']
 
     # make request
     try:
-        response = requests.request(method, "https://kubernetes.default.svc" + uri, headers={
-            "Authorization": f"Bearer {config.pod_token}",
+        response = requests.request(method, api + uri, headers={
+            "Authorization": f"Bearer {token}",
             "Content-Type": contentType,
             "Accept": "application/json",
             "Connection": "close"
@@ -276,11 +323,16 @@ def validate_quota_manager(username):
 
     # fetch list of quota managers
     managers_list = api_request("GET",
-                                f"/apis/user.openshift.io/v1/groups/{config.quota_managers_group}").json()["users"]
+                                f"/apis/user.openshift.io/v1/groups/{config.quota_managers_group}", local=True).json()["users"]
 
     # make sure user can manage quota
     if type(managers_list) != list or username not in managers_list:
         abort(f"user '{username}' is not allowed to manage project quota", 401)
+
+def validate_cluster(cluster):
+
+    if cluster not in get_cluster_list():
+        abort(f"'{cluster} cluster is not a valid cluster'")
 
 def validate_namespace(namespace):
     
@@ -314,6 +366,8 @@ def get_project_list():
         "projects": projects
     }
 
+def get_cluster_list():
+    return list(config.clusters.keys())
 
 @app.before_request
 def check_authorization():
@@ -323,14 +377,19 @@ def check_authorization():
         return
 
     # make sure authentication token is present
-    validate_params(flask.request.args, [ "token" ])
+    validate_params(flask.request.args, [ "token", "cluster" ])
 
     # make sure user is a quota manager
     username = get_username(flask.request.args["token"])
     validate_quota_manager(username)
 
-    # add quota manager's username to current request context
+    # make sure cluster is valid
+    cluster = flask.request.args["cluster"]
+    validate_cluster(cluster)
+
+    # add quota manager's username and cluster to current request context
     request_context.username = username
+    request_context.cluster = cluster
 
 @app.after_request
 def after_request(response):
@@ -356,6 +415,7 @@ def get_username(token):
     # review user token
     review_result = api_request("POST",
                                 "/apis/authentication.k8s.io/v1/tokenreviews",
+                                local=True,
                                 json=\
                                     {
                                         "kind": "TokenReview",
@@ -448,6 +508,13 @@ def r_get_validation_quota():
 def r_get_username():
     validate_params(flask.request.args, [ "token" ])
     return get_username(flask.request.args["token"]), 200
+
+@app.route("/clusters", methods=["GET"])
+@do_not_authorize
+def r_get_clusters():
+
+    # return jsonified cluster names
+    return flask.jsonify(get_cluster_list())
 
 @app.route("/projects", methods=["GET"])
 def r_get_projects():
