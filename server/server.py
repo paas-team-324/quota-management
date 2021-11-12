@@ -277,10 +277,10 @@ def route_to_path(route):
     return None
 
 def format_response(message):
-    return { "message": message.capitalize() }
+    return { "message": message[0].upper() + message[1:] }
 
 def abort(message, code):
-    logger.debug(message)
+    logger.debug(f"responded to client: {message}")
     flask.abort(flask.make_response(format_response(message), code ))
 
 def api_request(method, uri, params={}, json=None, contentType="application/json", dry_run=False, local=False):
@@ -473,7 +473,7 @@ def patch_quota(user_scheme, project, username, dry_run=False):
                     contentType="application/strategic-merge-patch+json",
                     dry_run=dry_run)
         if not dry_run:
-            logger.info(f"user '{username}' has updated the '{patch['name']}' quota for project '{project}': {patch['data']['spec']['hard']}")
+            logger.info(f"user '{username}' has updated the '{patch['name']}' quota for project '{project}' on cluster '{request_context.cluster}': {patch['data']['spec']['hard']}")
 
 # ========== UI ==========
 
@@ -556,7 +556,7 @@ def r_post_projects():
                     }
                 })
 
-    logger.info(f"user '{request_context.username}' has created a project called '{new_project}'")
+    logger.info(f"user '{request_context.username}' has created a project called '{new_project}' on cluster '{request_context.cluster}'")
 
     # patch new project's quota
     patch_quota(get_request_json(flask.request), new_project, request_context.username, dry_run=False)
@@ -586,9 +586,9 @@ def r_post_projects():
                     ]
                 })
 
-    logger.info(f"user '{request_context.username}' has assigned '{admin_user_name}' as admin of project '{new_project}'")
+    logger.info(f"user '{request_context.username}' has assigned '{admin_user_name}' as admin of project '{new_project}' on cluster '{request_context.cluster}'")
 
-    return flask.jsonify(format_response(f"project '{new_project}' has been successfully created")), 200
+    return flask.jsonify(format_response(f"project '{new_project}' has been successfully created on cluster '{config.clusters[request_context.cluster]['displayName']}'")), 200
 
 @app.route("/healthz", methods=["GET"])
 @do_not_authorize
@@ -657,7 +657,7 @@ def r_put_quota():
     # try patching quota
     patch_quota(get_request_json(flask.request), flask.request.args["project"], request_context.username)
 
-    return flask.jsonify(format_response(f"quota updated successfully for project '{flask.request.args['project']}'")), 200
+    return flask.jsonify(format_response(f"quota updated successfully for project '{flask.request.args['project']}' on cluster '{config.clusters[request_context.cluster]['displayName']}'")), 200
 
 if __name__ == "__main__":
 
