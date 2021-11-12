@@ -1,16 +1,9 @@
 import React from 'react';
 import './App.css';
 import Auth from './Auth';
-import UpdateQuota from './UpdateQuota';
-import NewProject from './NewProject';
-import { Container, Toolbar, AppBar, Typography, Grid, Paper, Tab, Button, Dialog, DialogTitle, List, ListItem, ListItemText } from '@material-ui/core';
-import { Alert, TabContext, TabPanel, TabList, AlertTitle } from '@material-ui/lab';
-import EditIcon from '@material-ui/icons/Edit';
-import AddIcon from '@material-ui/icons/Add';
-
-// jsonschema validator
-let Validator = require('jsonschema').Validator
-const validator = new Validator
+import Cluster from './Cluster';
+import { Container, Toolbar, AppBar, Typography, Grid, Button, Dialog, DialogTitle, List, ListItem, ListItemText } from '@material-ui/core';
+import { Alert, AlertTitle } from '@material-ui/lab';
 
 class App extends React.Component {
     constructor () {
@@ -24,7 +17,7 @@ class App extends React.Component {
 			cluster: null,
 			cluster_dialog_open: false,
 			error: null,
-			tab: 0,
+
 			alerts: []
         };
 
@@ -175,10 +168,9 @@ class App extends React.Component {
 											</List>
 										</Dialog>
 
-										{this.state.cluster != null ? (
+										{this.state.cluster != null && (
 
 											<span>
-
 												<Button
 													size="small"
 													variant="outlined"
@@ -188,37 +180,9 @@ class App extends React.Component {
 													onClick={() => this.setState({cluster_dialog_open: true})}>
 													{this.state.clusters[this.state.cluster]["displayName"]}
 												</Button>
-
-												<TabContext value={this.state.tab}>
-													<Paper square elevation={2} style={{ marginTop: '1%' }}>
-														<TabList
-															indicatorColor="primary"
-															textColor="primary"
-															variant="fullWidth"
-															onChange={(event, newValue) => {
-																this.setState({
-																	tab: newValue
-																})
-															}}
-														>
-															<Tab label="Edit Quota" icon={<EditIcon />} value={0}/>
-															<Tab label="New Project" icon={<AddIcon />} value={1}/>
-														</TabList>
-													</Paper>
-													<Paper square elevation={2} style={{ marginTop: '1%' }}>
-														<TabPanel value={0}>
-															<UpdateQuota request={this.request} addAlert={this.addAlert} validator={validator}></UpdateQuota>
-														</TabPanel>
-														<TabPanel value={1}>
-															<NewProject request={this.request} addAlert={this.addAlert} validator={validator}></NewProject>
-														</TabPanel>
-													</Paper>
-												</TabContext>
-
+												<Cluster request={this.request} addAlert={this.addAlert} cluster={this.state.cluster}></Cluster>
 											</span>
 
-										) : (
-											<span></span>
 										)}
 
 									</span>
@@ -251,6 +215,7 @@ class App extends React.Component {
 								<Alert style={{ marginTop: '1%' }} severity={alert["severity"]} onClose={() => {this.closeAlert(alert)}}>{alert["message"]}</Alert>
 							</Grid>
 						)}
+						
 					</Container>
                 </div>
             </Container>

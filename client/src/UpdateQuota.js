@@ -29,6 +29,21 @@ class UpdateQuota extends React.Component {
         this.update = this.update.bind(this)
     };
 
+    componentDidUpdate(prevProps) {
+
+        // remount component on cluster change
+        if (this.props.cluster != prevProps.cluster) {
+
+            this.setState({
+                init_loading: true,
+                init_error: null
+            }, function() {
+                this.componentDidMount()
+            }.bind(this))
+
+        }
+    }
+
     changeProject(project) {
 
         this.setState({
