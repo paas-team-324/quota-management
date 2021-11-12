@@ -3,7 +3,7 @@ import './App.css';
 import Auth from './Auth';
 import UpdateQuota from './UpdateQuota';
 import NewProject from './NewProject';
-import { Container, Toolbar, AppBar, Typography, Grid, Paper, Tab } from '@material-ui/core';
+import { Container, Toolbar, AppBar, Typography, Grid, Paper, Tab, Button, Dialog, DialogTitle, List, ListItem, ListItemText } from '@material-ui/core';
 import { Alert, TabContext, TabPanel, TabList, AlertTitle } from '@material-ui/lab';
 import EditIcon from '@material-ui/icons/Edit';
 import AddIcon from '@material-ui/icons/Add';
@@ -20,8 +20,9 @@ class App extends React.Component {
 			authenticated: false,
             token: null,
 			username: null,
-			clusters: [],
+			clusters: {},
 			cluster: null,
+			cluster_dialog_open: false,
 			error: null,
 			tab: 0,
 			alerts: []
@@ -35,7 +36,7 @@ class App extends React.Component {
 
 	update_clusters_list() {
 
-		// fetch cluster names
+		// fetch clusters
 		this.request('GET', '/clusters', {}, {}, function(response, ok) {
 
 			let clusters = JSON.parse(response)
@@ -50,7 +51,7 @@ class App extends React.Component {
 				} else {
 					this.setState({
 						clusters: clusters,
-						cluster: clusters[0]
+						cluster_dialog_open: true
 					})
 				}
 
@@ -68,9 +69,7 @@ class App extends React.Component {
 
 		// add auth token and cluster to query params
 		query_params["token"] = this.state.token
-		if (this.state.cluster != null) {
-			query_params["cluster"] = this.state.cluster
-		}
+		query_params["cluster"] = this.state.cluster
 
 		// prepare xhr request
 		let xhr_request = new XMLHttpRequest()
@@ -154,35 +153,75 @@ class App extends React.Component {
 					}}>
 						{this.state.authenticated ? (
 							
-							<div>
+							<span>
 
 								{this.state.error == null ? (
 
-									<TabContext value={this.state.tab}>
-										<Paper square elevation={2}>
-											<TabList
-												indicatorColor="primary"
-												textColor="primary"
-												variant="fullWidth"
-												onChange={(event, newValue) => {
-													this.setState({
-														tab: newValue
-													})
-												}}
-											>
-												<Tab label="Edit Quota" icon={<EditIcon />} value={0}/>
-												<Tab label="New Project" icon={<AddIcon />} value={1}/>
-											</TabList>
-										</Paper>
-										<Paper square elevation={2} style={{ marginTop: '1%' }}>
-											<TabPanel value={0}>
-												<UpdateQuota request={this.request} addAlert={this.addAlert} validator={validator}></UpdateQuota>
-											</TabPanel>
-											<TabPanel value={1}>
-												<NewProject request={this.request} addAlert={this.addAlert} validator={validator}></NewProject>
-											</TabPanel>
-										</Paper>
-									</TabContext>
+									<span>
+
+										<Dialog open={this.state.cluster_dialog_open}>
+											<DialogTitle>Choose cluster</DialogTitle>
+											<List sx={{ pt: 0 }}>
+												{Object.keys(this.state.clusters).map((cluster) => (
+													<ListItem button onClick={() => {
+														this.setState({
+															cluster: cluster,
+															cluster_dialog_open: false,
+														})
+													}}>
+														<ListItemText primary={this.state.clusters[cluster]["displayName"]} />
+													</ListItem>
+												))}
+											</List>
+										</Dialog>
+
+										{this.state.cluster != null ? (
+
+											<span>
+
+												<Button
+													size="small"
+													variant="outlined"
+													color="primary"
+													component="span"
+													fullWidth
+													onClick={() => this.setState({cluster_dialog_open: true})}>
+													{this.state.clusters[this.state.cluster]["displayName"]}
+												</Button>
+
+												<TabContext value={this.state.tab}>
+													<Paper square elevation={2} style={{ marginTop: '1%' }}>
+														<TabList
+															indicatorColor="primary"
+															textColor="primary"
+															variant="fullWidth"
+															onChange={(event, newValue) => {
+																this.setState({
+																	tab: newValue
+																})
+															}}
+														>
+															<Tab label="Edit Quota" icon={<EditIcon />} value={0}/>
+															<Tab label="New Project" icon={<AddIcon />} value={1}/>
+														</TabList>
+													</Paper>
+													<Paper square elevation={2} style={{ marginTop: '1%' }}>
+														<TabPanel value={0}>
+															<UpdateQuota request={this.request} addAlert={this.addAlert} validator={validator}></UpdateQuota>
+														</TabPanel>
+														<TabPanel value={1}>
+															<NewProject request={this.request} addAlert={this.addAlert} validator={validator}></NewProject>
+														</TabPanel>
+													</Paper>
+												</TabContext>
+
+											</span>
+
+										) : (
+											<span></span>
+										)}
+
+									</span>
 
 								) : (
 									<Grid item xs={12}>
@@ -193,7 +232,7 @@ class App extends React.Component {
                                     </Grid>
 								)}
 
-							</div>
+							</span>
 
 						) : (
 							<Auth finishAuthentication={(token, username) => {

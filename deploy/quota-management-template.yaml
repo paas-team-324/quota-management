@@ -56,12 +56,25 @@ objects:
           }
       }
 - apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: ca-bundle
+    namespace: ${NAMESPACE}
+  data:
+    ca-bundle.pem: |
+- apiVersion: v1
   kind: Secret
   metadata:
     name: clusters
     namespace: ${NAMESPACE}
   stringData:
-    local: '{"api":"https://kubernetes.default.svc:443","token":""}'
+    local: |
+        {
+            "displayName": "Local cluster",
+            "api": "https://kubernetes.default.svc:443",
+            "production": false,
+            "token": ""
+        }
 - apiVersion: v1
   kind: ServiceAccount
   metadata:
@@ -145,6 +158,10 @@ objects:
             mountPath: "/app/scheme.json"
             subPath: "scheme.json"
             readOnly: true
+          - name: ca-bundle
+            mountPath: "/usr/local/share/ca-certificates/extra/ca-bundle.pem"
+            subPath: "ca-bundle.pem"
+            readOnly: true
           - name: clusters
             mountPath: "/app/clusters"
             readOnly: true
@@ -153,6 +170,9 @@ objects:
         - name: scheme
           configMap:
             name: quota-scheme
+        - name: ca-bundle
+          configMap:
+            name: ca-bundle
         - name: clusters
           secret:
             secretName: clusters

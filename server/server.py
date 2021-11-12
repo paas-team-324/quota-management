@@ -107,9 +107,11 @@ class Config:
             {
                 "type": "object",
                 "additionalProperties": False,
-                "required": [ "api", "token" ],
+                "required": [ "displayName", "api", "production", "token" ],
                 "properties": {
+                    "displayName": { "type": "string" },
                     "api": { "type": "string" },
+                    "production": { "type": "boolean" },
                     "token": { "type": "string" }
                 }
             }
@@ -298,7 +300,11 @@ def api_request(method, uri, params={}, json=None, contentType="application/json
             "Content-Type": contentType,
             "Accept": "application/json",
             "Connection": "close"
-        }, verify="/var/run/secrets/kubernetes.io/serviceaccount/ca.crt", json=json, params={ **params, **( { "dryRun": "All" } if dry_run else {} ) })
+        },
+        timeout=10,
+        verify="/etc/ssl/certs/ca-certificates.crt",
+        json=json,
+        params={ **params, **( { "dryRun": "All" } if dry_run else {} ) })
         response.raise_for_status()
 
     # error received from the API
@@ -308,7 +314,7 @@ def api_request(method, uri, params={}, json=None, contentType="application/json
     # error during the request itself
     except requests.exceptions.RequestException as error:
         logger.error(error)
-        abort(error.strerror, 500)
+        abort("an unexpected error has occurred", 500)
 
     return response
 
@@ -331,8 +337,8 @@ def validate_quota_manager(username):
 
 def validate_cluster(cluster):
 
-    if cluster not in get_cluster_list():
-        abort(f"'{cluster} cluster is not a valid cluster'")
+    if cluster not in config.clusters.keys():
+        abort(f"cluster '{cluster}' is not a valid cluster", 400)
 
 def validate_namespace(namespace):
     
@@ -351,7 +357,7 @@ def get_request_json(request):
 def get_project_list():
 
     # query API
-    response = api_request(  "GET",
+    response = api_request( "GET",
                             "/api/v1/resourcequotas")
 
     # prepare unique list of projects with quota objects
@@ -365,9 +371,6 @@ def get_project_list():
     return {
         "projects": projects
     }
-
-def get_cluster_list():
-    return list(config.clusters.keys())
 
 @app.before_request
 def check_authorization():
@@ -487,7 +490,7 @@ def r_get_ui(element):
 @app.route("/env.js", methods=["GET"])
 @do_not_authorize
 def r_get_env():
-    return flask.render_template('env.js', oauth_endpoint=config.oauth_endpoint, oauth_client_id=config.oauth_client_id)
+    return flask.Response(flask.render_template('env.js', oauth_endpoint=config.oauth_endpoint, oauth_client_id=config.oauth_client_id), mimetype="text/javascript")
 
 # ========== API =========
 
@@ -513,8 +516,11 @@ def r_get_username():
 @do_not_authorize
 def r_get_clusters():
 
-    # return jsonified cluster names
-    return flask.jsonify(get_cluster_list())
+    # return jsonified cluster names with relevant info
+    return { name: { 
+                "displayName": cluster["displayName"],
+                "production": cluster["production"]
+            } for name, cluster in config.clusters.items() }
 
 @app.route("/projects", methods=["GET"])
 def r_get_projects():
