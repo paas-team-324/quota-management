@@ -102,6 +102,20 @@ class Config:
                 }
             }
 
+            # cluster credentials file
+            cluster_file = \
+            {
+                "type": "object",
+                "additionalProperties": False,
+                "required": [ "displayName", "api", "production", "token" ],
+                "properties": {
+                    "displayName": { "type": "string" },
+                    "api": { "type": "string" },
+                    "production": { "type": "boolean" },
+                    "token": { "type": "string" }
+                }
+            }
+
             # user object name validation
             username = \
             {
@@ -201,7 +215,9 @@ class Config:
             self.oauth_endpoint = os.environ["OAUTH_ENDPOINT"]
             self.oauth_client_id = os.environ["OAUTH_CLIENT_ID"]
             self.quota_scheme_path = os.environ["QUOTA_SCHEME_FILE"]
+            self.clusters_dir = os.environ["CLUSTERS_DIR"]
             self.quota_managers_group = os.environ["QUOTA_MANAGERS_GROUP"]
+            self.insecure_requests = os.environ["INSECURE_REQUESTS"]
         except KeyError as error:
             config_logger.critical(f"one of the environment variables is not defined: {error}")
 
@@ -220,6 +236,40 @@ class Config:
         # generate schemas object
         self.schemas = self._Schemas(config_logger.name, self.quota_scheme)
 
+        # ensure clusters dir exists
+        if not os.path.exists(self.clusters_dir):
+            config_logger.critical(f"clusters directory is not present at '{self.clusters_dir}'")
+
+        # parse clusters
+        self.clusters = {}
+        for cluster in os.listdir(self.clusters_dir):
+
+            # ignore hidden files
+            if not cluster.startswith("."):
+
+                try:
+                    with open(os.path.join(self.clusters_dir, cluster)) as cluster_file:
+                        
+                        # read, validate and store
+                        cluster_json = json.loads(cluster_file.read())
+                        jsonschema.validate(instance=cluster_json, schema=self.schemas.cluster_file)
+                        self.clusters[cluster] = cluster_json
+
+                except json.JSONDecodeError as error:
+                    config_logger.critical(f"could not parse '{cluster}' cluster file: {error}")
+                except jsonschema.ValidationError as error:
+                    config_logger.critical(f"'{cluster}' cluster file does not conform to schema: {error}")
+
+        config_logger.info(f"{len(self.clusters)} clusters registered")
+
+        # parse insecure requests setting
+        if self.insecure_requests.lower() == "true":
+            config_logger.warning("running in insecure requests mode, remote cluster certificates won't be checked!")
+            requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
+            self.insecure_requests = True
+        else:
+            self.insecure_requests = False
+
 config = None
 logger = None
 app = flask.Flask(__name__, static_folder=None, template_folder='ui/templates')
@@ -236,22 +286,34 @@ def route_to_path(route):
     return None
 
 def format_response(message):
-    return { "message": message.capitalize() }
+    return { "message": message[0].upper() + message[1:] }
 
 def abort(message, code):
-    logger.debug(message)
+    logger.debug(f"responded to client: {message}")
     flask.abort(flask.make_response(format_response(message), code ))
 
-def api_request(method, uri, params={}, json=None, contentType="application/json", dry_run=False):
+def api_request(method, uri, params={}, json=None, contentType="application/json", dry_run=False, local=False):
+
+    # distinguish between local and remote request
+    if local:
+        api = "https://kubernetes.default.svc:443"
+        token = config.pod_token
+    else:
+        api = config.clusters[request_context.cluster]['api']
+        token = config.clusters[request_context.cluster]['token']
 
     # make request
     try:
-        response = requests.request(method, "https://kubernetes.default.svc" + uri, headers={
-            "Authorization": f"Bearer {config.pod_token}",
+        response = requests.request(method, api + uri, headers={
+            "Authorization": f"Bearer {token}",
             "Content-Type": contentType,
             "Accept": "application/json",
             "Connection": "close"
-        }, verify="/var/run/secrets/kubernetes.io/serviceaccount/ca.crt", json=json, params={ **params, **( { "dryRun": "All" } if dry_run else {} ) })
+        },
+        timeout=10,
+        verify=(False if config.insecure_requests else "/etc/ssl/certs/ca-certificates.crt"),
+        json=json,
+        params={ **params, **( { "dryRun": "All" } if dry_run else {} ) })
         response.raise_for_status()
 
     # error received from the API
@@ -261,7 +323,7 @@ def api_request(method, uri, params={}, json=None, contentType="application/json
     # error during the request itself
     except requests.exceptions.RequestException as error:
         logger.error(error)
-        abort(error.strerror, 500)
+        abort("an unexpected error has occurred", 500)
 
     return response
 
@@ -276,11 +338,16 @@ def validate_quota_manager(username):
 
     # fetch list of quota managers
     managers_list = api_request("GET",
-                                f"/apis/user.openshift.io/v1/groups/{config.quota_managers_group}").json()["users"]
+                                f"/apis/user.openshift.io/v1/groups/{config.quota_managers_group}", local=True).json()["users"]
 
     # make sure user can manage quota
     if type(managers_list) != list or username not in managers_list:
         abort(f"user '{username}' is not allowed to manage project quota", 401)
+
+def validate_cluster(cluster):
+
+    if cluster not in config.clusters.keys():
+        abort(f"cluster '{cluster}' is not a valid cluster", 400)
 
 def validate_namespace(namespace):
     
@@ -299,7 +366,7 @@ def get_request_json(request):
 def get_project_list():
 
     # query API
-    response = api_request(  "GET",
+    response = api_request( "GET",
                             "/api/v1/resourcequotas")
 
     # prepare unique list of projects with quota objects
@@ -314,7 +381,6 @@ def get_project_list():
         "projects": projects
     }
 
-
 @app.before_request
 def check_authorization():
 
@@ -323,14 +389,19 @@ def check_authorization():
         return
 
     # make sure authentication token is present
-    validate_params(flask.request.args, [ "token" ])
+    validate_params(flask.request.args, [ "token", "cluster" ])
 
     # make sure user is a quota manager
     username = get_username(flask.request.args["token"])
     validate_quota_manager(username)
 
-    # add quota manager's username to current request context
+    # make sure cluster is valid
+    cluster = flask.request.args["cluster"]
+    validate_cluster(cluster)
+
+    # add quota manager's username and cluster to current request context
     request_context.username = username
+    request_context.cluster = cluster
 
 @app.after_request
 def after_request(response):
@@ -356,6 +427,7 @@ def get_username(token):
     # review user token
     review_result = api_request("POST",
                                 "/apis/authentication.k8s.io/v1/tokenreviews",
+                                local=True,
                                 json=\
                                     {
                                         "kind": "TokenReview",
@@ -410,7 +482,7 @@ def patch_quota(user_scheme, project, username, dry_run=False):
                     contentType="application/strategic-merge-patch+json",
                     dry_run=dry_run)
         if not dry_run:
-            logger.info(f"user '{username}' has updated the '{patch['name']}' quota for project '{project}': {patch['data']['spec']['hard']}")
+            logger.info(f"user '{username}' has updated the '{patch['name']}' quota for project '{project}' on cluster '{request_context.cluster}': {patch['data']['spec']['hard']}")
 
 # ========== UI ==========
 
@@ -427,7 +499,7 @@ def r_get_ui(element):
 @app.route("/env.js", methods=["GET"])
 @do_not_authorize
 def r_get_env():
-    return flask.render_template('env.js', oauth_endpoint=config.oauth_endpoint, oauth_client_id=config.oauth_client_id)
+    return flask.Response(flask.render_template('env.js', oauth_endpoint=config.oauth_endpoint, oauth_client_id=config.oauth_client_id), mimetype="text/javascript")
 
 # ========== API =========
 
@@ -448,6 +520,16 @@ def r_get_validation_quota():
 def r_get_username():
     validate_params(flask.request.args, [ "token" ])
     return get_username(flask.request.args["token"]), 200
+
+@app.route("/clusters", methods=["GET"])
+@do_not_authorize
+def r_get_clusters():
+
+    # return jsonified cluster names with relevant info
+    return { name: { 
+                "displayName": cluster["displayName"],
+                "production": cluster["production"]
+            } for name, cluster in config.clusters.items() }
 
 @app.route("/projects", methods=["GET"])
 def r_get_projects():
@@ -483,7 +565,7 @@ def r_post_projects():
                     }
                 })
 
-    logger.info(f"user '{request_context.username}' has created a project called '{new_project}'")
+    logger.info(f"user '{request_context.username}' has created a project called '{new_project}' on cluster '{request_context.cluster}'")
 
     # patch new project's quota
     patch_quota(get_request_json(flask.request), new_project, request_context.username, dry_run=False)
@@ -513,9 +595,9 @@ def r_post_projects():
                     ]
                 })
 
-    logger.info(f"user '{request_context.username}' has assigned '{admin_user_name}' as admin of project '{new_project}'")
+    logger.info(f"user '{request_context.username}' has assigned '{admin_user_name}' as admin of project '{new_project}' on cluster '{request_context.cluster}'")
 
-    return flask.jsonify(format_response(f"project '{new_project}' has been successfully created")), 200
+    return flask.jsonify(format_response(f"project '{new_project}' has been successfully created on cluster '{config.clusters[request_context.cluster]['displayName']}'")), 200
 
 @app.route("/healthz", methods=["GET"])
 @do_not_authorize
@@ -584,7 +666,7 @@ def r_put_quota():
     # try patching quota
     patch_quota(get_request_json(flask.request), flask.request.args["project"], request_context.username)
 
-    return flask.jsonify(format_response(f"quota updated successfully for project '{flask.request.args['project']}'")), 200
+    return flask.jsonify(format_response(f"quota updated successfully for project '{flask.request.args['project']}' on cluster '{config.clusters[request_context.cluster]['displayName']}'")), 200
 
 if __name__ == "__main__":
 
