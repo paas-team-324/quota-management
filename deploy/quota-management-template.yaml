@@ -226,7 +226,7 @@ parameters:
   name: ROUTER_CANONICAL_HOSTNAME
   required: true
 - description: Docker image to use
-  value: docker.io/vladpbr/quota-management:1.2
+  value: docker.io/vladpbr/quota-management:1.3
   name: IMAGE
   required: true
 - description: Pull policy for the image
