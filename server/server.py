@@ -217,6 +217,7 @@ class Config:
             self.quota_scheme_path = os.environ["QUOTA_SCHEME_FILE"]
             self.clusters_dir = os.environ["CLUSTERS_DIR"]
             self.quota_managers_group = os.environ["QUOTA_MANAGERS_GROUP"]
+            self.insecure_requests = os.environ["INSECURE_REQUESTS"]
         except KeyError as error:
             config_logger.critical(f"one of the environment variables is not defined: {error}")
 
@@ -261,6 +262,14 @@ class Config:
 
         config_logger.info(f"{len(self.clusters)} clusters registered")
 
+        # parse insecure requests setting
+        if config.insecure_requests.lower() == "true":
+            config_logger.warn("running in insecure requests mode, remote cluster certificates won't be checked!")
+            requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
+            config.insecure_requests = True
+        else:
+            config.insecure_requests = False
+
 config = None
 logger = None
 app = flask.Flask(__name__, static_folder=None, template_folder='ui/templates')
@@ -302,7 +311,7 @@ def api_request(method, uri, params={}, json=None, contentType="application/json
             "Connection": "close"
         },
         timeout=10,
-        verify="/etc/ssl/certs/ca-certificates.crt",
+        verify=(False if config.insecure_requests else "/etc/ssl/certs/ca-certificates.crt"),
         json=json,
         params={ **params, **( { "dryRun": "All" } if dry_run else {} ) })
         response.raise_for_status()

@@ -153,6 +153,8 @@ objects:
             value: "/app/clusters"
           - name: QUOTA_MANAGERS_GROUP
             value: "${QUOTA_MANAGERS_GROUP}"
+          - name: INSECURE_REQUESTS
+            value: "${INSECURE_REQUESTS}"
           volumeMounts:
           - name: scheme
             mountPath: "/app/scheme.json"
@@ -230,4 +232,8 @@ parameters:
 - description: Pull policy for the image
   value: IfNotPresent
   name: PULL_POLICY
+  required: true
+- description: Should the server verify remote cluster certificates
+  value: False
+  name: INSECURE_REQUESTS
   required: true
