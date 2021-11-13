@@ -263,12 +263,12 @@ class Config:
         config_logger.info(f"{len(self.clusters)} clusters registered")
 
         # parse insecure requests setting
-        if config.insecure_requests.lower() == "true":
-            config_logger.warn("running in insecure requests mode, remote cluster certificates won't be checked!")
+        if self.insecure_requests.lower() == "true":
+            config_logger.warning("running in insecure requests mode, remote cluster certificates won't be checked!")
             requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
-            config.insecure_requests = True
+            self.insecure_requests = True
         else:
-            config.insecure_requests = False
+            self.insecure_requests = False
 
 config = None
 logger = None

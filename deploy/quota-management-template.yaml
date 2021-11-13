@@ -234,6 +234,6 @@ parameters:
   name: PULL_POLICY
   required: true
 - description: Should the server verify remote cluster certificates
-  value: False
+  value: "False"
   name: INSECURE_REQUESTS
   required: true
