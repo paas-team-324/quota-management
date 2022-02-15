@@ -16,7 +16,8 @@ class QuotaParameter extends React.Component {
             units: this.props.parameter["units"],
 
             value: this.props.current["value"],
-            selected_units: this.props.current["units"]
+            selected_units: this.props.current["units"],
+            valid: true
         };
 
         this.validate = this.validate.bind(this)
@@ -24,18 +25,15 @@ class QuotaParameter extends React.Component {
 
     validate(value) {
 
-        // test input with schema
-        if (value === '' || this.props.validator.validate(value, this.props.validation).errors.length == 0) {
+        // set field text and check for validation errors
+        this.setState({
+            value: value,
+            valid: this.props.validator.validate(value, this.props.validation).errors.length == 0
+        })
 
-            // set field text
-            this.setState({
-                value: value,
-            })
-
-            // edit quota object
-            this.props.edit(this.props.parameter_name, value, this.state.selected_units)
-        }
-
+        // edit quota object
+        this.props.edit(this.props.parameter_name, value, this.state.selected_units)
+        
     }
 
     render() {
@@ -49,6 +47,7 @@ class QuotaParameter extends React.Component {
                         helperText={DATA_TYPE_DESCRIPTIONS[this.props.parameter["type"]]}
                         value={this.state.value}
                         onChange={event => this.validate(event.target.value)}
+                        error={!this.state.valid}
                         fullWidth
                     />
                 </Grid>

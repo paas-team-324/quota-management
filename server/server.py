@@ -66,42 +66,6 @@ class Config:
             # list of valid quantity units
             _valid_units = [ "", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "n", "u", "m", "k", "M", "G", "T", "P", "E" ]
 
-            # this is how a quota scheme should look like
-            scheme_file = \
-            {
-                "type": "object",
-                "minProperties": 1,
-                "additionalProperties": False,
-                "patternProperties": {
-                    "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$": {
-                        "type": "object",
-                        "minProperties": 1,
-                        "additionalProperties": {
-                            "type": "object",
-                            "additionalProperties": False,
-                            "required": [ "name", "units", "type" ],
-                            "properties": {
-                                "name": { "type": "string" },
-                                "units": {
-                                    "anyOf": [
-                                        {
-                                            "enum": _valid_units
-                                        },
-                                        {
-                                            "type": "array",
-                                            "minItems": 2,
-                                            "uniqueItems": True,
-                                            "items": { "enum": _valid_units }
-                                        }
-                                    ]
-                                },
-                                "type": { "type": "string", "enum": [ "int", "float" ] },
-                            }
-                        }
-                    }
-                }
-            }
-
             # cluster credentials file
             cluster_file = \
             {
@@ -136,7 +100,43 @@ class Config:
             data_types = \
             {
                 "int" : "^\\d+$",
-                "float": "^\\d*\\.?\\d*$"
+                "float": "^\\d+(\\.\\d+)?$"
+            }
+
+            # this is how a quota scheme should look like
+            scheme_file = \
+            {
+                "type": "object",
+                "minProperties": 1,
+                "additionalProperties": False,
+                "patternProperties": {
+                    "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$": {
+                        "type": "object",
+                        "minProperties": 1,
+                        "additionalProperties": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "required": [ "name", "units", "type" ],
+                            "properties": {
+                                "name": { "type": "string" },
+                                "units": {
+                                    "anyOf": [
+                                        {
+                                            "enum": _valid_units
+                                        },
+                                        {
+                                            "type": "array",
+                                            "minItems": 2,
+                                            "uniqueItems": True,
+                                            "items": { "enum": _valid_units }
+                                        }
+                                    ]
+                                },
+                                "type": { "type": "string", "enum": list(data_types.keys()) },
+                            }
+                        }
+                    }
+                }
             }
 
             def __init__(self, name, quota):
