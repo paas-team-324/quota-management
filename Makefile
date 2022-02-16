@@ -2,12 +2,21 @@
 # Make sure that:
 # * docker is running
 # * Red Hat CRC is running
+# * able to push to internal registry (make get-registry-certificate)
 
 VERSION ?= 1.3
 
-# TODO
-trust-registry:
-	echo Not implemented
+get-registry-certificate:
+	oc get secret router-certs-default -n openshift-ingress -o jsonpath='{.data.tls\.crt}' | base64 -d
+
+	#
+	# Add the following certs to trusted CAs of your machine and restart docker service
+	#
+	# Alternatively, you can add it as insecure registry in /etc/docker/daemon.json like so:
+	# {
+	# 	"insecure-registries" : [ "default-route-openshift-image-registry.apps-crc.testing" ]
+	# }
+	#
 
 build:
 	docker build -t default-route-openshift-image-registry.apps-crc.testing/quota-management/quota-management:${VERSION} .
