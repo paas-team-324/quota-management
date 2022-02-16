@@ -30,7 +30,7 @@ OpenShift application for easy management of resources for projects located with
         -p NAMESPACE=<project-name> \
         -p OAUTH_ENDPOINT=<cluster-oauth-endpoint (e.g. oauth-openshift.apps-crc.testing)> \
         -p ROUTER_CANONICAL_HOSTNAME=<router-subdomain (e.g. apps-crc.testing)> \
-        -p IMAGE=<quota-management-image (only relevant for disconnected environments)>
+        -p IMAGE=<quota-management-image (only relevant for disconnected environments)> \
         > quota-management.yaml
     ```
 
