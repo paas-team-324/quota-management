@@ -285,6 +285,11 @@ def route_to_path(route):
 
     return None
 
+def normalize_decimal(decimal):
+
+    # strip trailing zeroes and format as float
+    return '{:f}'.format(decimal.normalize())
+
 def format_response(message):
     return { "message": message[0].upper() + message[1:] }
 
@@ -443,6 +448,14 @@ def get_username(token):
     except KeyError:
         abort("invalid user token", 400)
 
+def get_quota(project):
+
+    # fetch quota objects for given project
+    quota_objects = api_request("GET",
+                                f"/api/v1/namespaces/{project}/resourcequotas").json()
+
+    return { quota_object['metadata']['name']:quota_object for quota_object in quota_objects['items'] }
+
 def patch_quota(user_scheme, project, username, dry_run=False):
 
     # validate user quota scheme
@@ -451,6 +464,9 @@ def patch_quota(user_scheme, project, username, dry_run=False):
     except jsonschema.ValidationError as error:
         abort(f"user provided scheme is invalid: {error.message}", 400)
 
+    # fetch quota objects for given project
+    quota_objects = get_quota(project)
+
     patches = []
         
     # iterate quota objects
@@ -458,11 +474,29 @@ def patch_quota(user_scheme, project, username, dry_run=False):
 
         parameters = {}
 
+        # store currently used quota for current resource quota object
+        quota_used = quota_objects[quota_object_name]['status']['used']
+
         # iterate quota parameters
         for quota_parameter_name in config.quota_scheme[quota_object_name].keys():
 
+            # parameter might not exist in 'used' fields which might be a sign of misconfiguration of project template quota or quota scheme
+            if quota_parameter_name in quota_used:
+                used_value = quota_used[quota_parameter_name]
+            else:
+                logger.warning(f"'{quota_parameter_name}' not found in '.status.used' of '{quota_object_name}' resource quota object in project '{project}'")
+                used_value = "0"
+
+            used_value_decimal = parse_quantity(used_value)
+
+            new_value = f"{user_scheme[quota_object_name][quota_parameter_name]['value']}{user_scheme[quota_object_name][quota_parameter_name]['units']}"
+
+            # check if new quota value is smaller than currently used
+            if parse_quantity(new_value).compare(used_value_decimal) == -1:
+                abort(f"new '{ config.quota_scheme[quota_object_name][quota_parameter_name]['name']}' quota value is smaller than currently used - new: '{new_value}', used: '{normalize_decimal(used_value_decimal)}'", 400)
+
             # append parameter
-            parameters[quota_parameter_name] = f"{user_scheme[quota_object_name][quota_parameter_name]['value']}{user_scheme[quota_object_name][quota_parameter_name]['units']}"
+            parameters[quota_parameter_name] = new_value
 
         # build new patch object
         patches.append({
@@ -618,6 +652,9 @@ def r_get_quota():
     # make sure project is managed
     validate_namespace(flask.request.args['project'])
 
+    # fetch quota objects for given project
+    quota_objects = get_quota(flask.request.args['project'])
+
     # prepare project quota JSON to be returned
     project_quota = {}
 
@@ -626,9 +663,8 @@ def r_get_quota():
 
         project_quota[quota_object_name] = {}
 
-        # fetch quota object from project
-        quota_object = api_request( "GET",
-                                    f"/api/v1/namespaces/{flask.request.args['project']}/resourcequotas/{quota_object_name}").json()
+        # store current quota object
+        quota_object = quota_objects[quota_object_name]
 
         # iterate quota parameters
         for quota_parameter_name in config.quota_scheme[quota_object_name].keys():
@@ -648,7 +684,7 @@ def r_get_quota():
 
             # strip trailing zeroes, format as float and set in return JSON
             project_quota[quota_object_name][quota_parameter_name] = {
-                "value": '{:f}'.format(value_decimal.normalize()),
+                "value": normalize_decimal(value_decimal),
                 "units": units
             }
 
