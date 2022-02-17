@@ -674,6 +674,10 @@ if __name__ == "__main__":
     config = Config("quota-manager")
     logger = get_logger(config.name)
 
+    # disable dictionary sorting on flask.jsonify()
+    # this way the quota scheme fields stay in the same order on client
+    app.config['JSON_SORT_KEYS'] = False
+
     # WSGIServer related variables
     listener = ( "0.0.0.0", 5000 )
     api_logger = get_logger(f"{config.name}-api")
