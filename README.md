@@ -31,6 +31,7 @@ OpenShift application for easy management of resources for projects located with
         -p OAUTH_ENDPOINT=<cluster-oauth-endpoint (e.g. oauth-openshift.apps-crc.testing)> \
         -p ROUTER_CANONICAL_HOSTNAME=<router-subdomain (e.g. apps-crc.testing)> \
         -p IMAGE=<quota-management-image (only relevant for disconnected environments)> \
+        -p PULL_POLICY=<IfNotPresent/Always> \
         > quota-management.yaml
     ```
 
@@ -71,3 +72,60 @@ Edit the resulting manifest using `vim quota-management.yaml` command. Objects o
 - Deployment/Service/Route: the application itself. Generally should not be of interest
 
 Now deploy the manifest: `oc create -f quota-management.yaml`
+
+## Development
+
+Quota Management is developed using Git Feature Branch workflow - each feature should be developed in a separate branch and then integrated into the "main" branch by means of a pull request. Each release is a tag and each tag represents a point in time in a "main" branch when enough features and fixes have been accumulated to represent and new version. Usually a release is created after some major addition (like project creation in 1.2 and management over multiple clusters in 1.3). Tags are formatted using semantic versioning (sort of, only major and minor versions are specified).
+
+### Adding a feature / fix
+
+1. Create a new branch for the feature:
+
+   ``` bash
+   git checkout -b feat/my-feature
+   ```
+
+2. Implement feature
+3. Set-up environment for testing:
+
+   ```bash
+   # create testing project
+   oc new-project quota-management
+
+   # configure project request to create ResourceQuota objects
+   oc create -f deploy/examples/template.yaml
+   oc patch project.config.openshift.io cluster --type='merge' --patch='{"spec":{"projectRequestTemplate":{"name":"project-request"}}}'
+   ```
+
+4. Push image with new feature to internal registry (the following commands assume that docker and CRC are running):
+
+   ``` bash
+   # trust CRC registry by following the instructions of the command below
+   get-registry-certificate
+
+   # build and push the image
+   make build-push VERSION=my-feature
+   ```
+
+5. Deploy application as you normally would and test. Don't forget to specify the image parameter in `oc process` to be `IMAGE=image-registry.openshift-image-registry.svc:5000/quota-management/quota-management:my-feature`. You might also want to specify `PULL_POLICY=Always`.
+6. Once the feature is complete, push and create a pull request to `main`.
+
+### Releasing a new version
+
+1. Make sure you are on the updated `main` branch:
+
+   ``` bash
+   git checkout main
+   git pull
+   ```
+
+2. Bump the version of the app to the new version in `Makefile` (at the very top) and `deploy/quota-management-template.yaml` (in the IMAGE parameter at the very bottom). Commit and push.
+
+3. Push the release image:
+
+   ``` bash
+   docker login docker.io -u paasteam324
+   make build-push IMAGE=docker.io/paasteam324/quota-management
+   ```
+
+4. Create a new tag from the last commit and from it, a new release. Specify features and fixes since the last release.
