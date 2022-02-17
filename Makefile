@@ -21,7 +21,7 @@ get-registry-certificate:
 build:
 	docker build -t default-route-openshift-image-registry.apps-crc.testing/quota-management/quota-management:${VERSION} .
 
-push: trust-registry
+push:
 	docker push default-route-openshift-image-registry.apps-crc.testing/quota-management/quota-management:${VERSION}
 
 build-push: build push
