@@ -2,3 +2,4 @@
 ./Dockerfile
 ./client/node_modules
 ./docs
+./disconnected

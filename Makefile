@@ -5,6 +5,7 @@
 # * able to push to internal registry (make get-registry-certificate)
 
 VERSION ?= 1.3
+IMAGE ?= default-route-openshift-image-registry.apps-crc.testing/quota-management/quota-management
 
 get-registry-certificate:
 	oc get secret router-certs-default -n openshift-ingress -o jsonpath='{.data.tls\.crt}' | base64 -d
@@ -19,10 +20,10 @@ get-registry-certificate:
 	#
 
 build:
-	docker build -t default-route-openshift-image-registry.apps-crc.testing/quota-management/quota-management:${VERSION} .
+	docker build -t ${IMAGE}:${VERSION} .
 
 push:
-	docker push default-route-openshift-image-registry.apps-crc.testing/quota-management/quota-management:${VERSION}
+	docker push ${IMAGE}:${VERSION}
 
 build-push: build push
 
