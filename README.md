@@ -101,7 +101,7 @@ Quota Management is developed using Git Feature Branch workflow - each feature s
 
    ``` bash
    # trust CRC registry by following the instructions of the command below
-   get-registry-certificate
+   make get-registry-certificate
 
    # build and push the image
    make build-push VERSION=my-feature
