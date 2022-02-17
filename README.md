@@ -75,7 +75,7 @@ Now deploy the manifest: `oc create -f quota-management.yaml`
 
 ## Development
 
-Quota Management is developed using Git Feature Branch workflow - each feature should be developed in a separate branch and then integrated into the "main" branch by means of a pull request. Each release is a tag and each tag represents a point in time in a "main" branch when enough features and fixes have been accumulated to represent and new version. Usually a release is created after some major addition (like project creation in 1.2 and management over multiple clusters in 1.3). Tags are formatted using semantic versioning (sort of, only major and minor versions are specified).
+Quota Management is developed using Git Feature Branch workflow - each feature should be developed in a separate branch and then integrated into the "main" branch by means of a pull request. Each release is a tag and each tag represents a point in time in a "main" branch when enough features and fixes have been accumulated to represent a new version. Usually a release is created after some major addition (like project creation in [1.2](https://github.com/paas-team-324/quota-management/releases/tag/1.2) and management over multiple clusters in [1.3](https://github.com/paas-team-324/quota-management/releases/tag/1.3)). Tags are formatted using semantic versioning (sort of, only major and minor versions are specified).
 
 ### Adding a feature / fix
 
@@ -86,7 +86,7 @@ Quota Management is developed using Git Feature Branch workflow - each feature s
    ```
 
 2. Implement feature
-3. Set-up environment for testing:
+3. Set-up environment for testing (the following commands assume that CRC is running):
 
    ```bash
    # create testing project
