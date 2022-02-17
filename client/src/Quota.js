@@ -177,6 +177,9 @@ class Quota extends React.Component {
                     quota = JSON.parse(JSON.stringify(this.props.current))
                 }
 
+                // set UI width based on amount of quota objects
+                this.props.setWidth(Object.keys(scheme).length)
+
                 // fetch validation schema
                 this.props.request('GET', '/validation/scheme', {}, {}, function(response, ok) {
 

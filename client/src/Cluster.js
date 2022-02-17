@@ -41,10 +41,10 @@ class Cluster extends React.Component {
                 </Paper>
                 <Paper square elevation={2} style={{ marginTop: '1%' }}>
                     <TabPanel value={0}>
-                        <UpdateQuota request={this.props.request} addAlert={this.props.addAlert} validator={validator} cluster={this.props.cluster}></UpdateQuota>
+                        <UpdateQuota request={this.props.request} addAlert={this.props.addAlert} validator={validator} cluster={this.props.cluster} setWidth={this.props.setWidth}></UpdateQuota>
                     </TabPanel>
                     <TabPanel value={1}>
-                        <NewProject request={this.props.request} addAlert={this.props.addAlert} validator={validator}></NewProject>
+                        <NewProject request={this.props.request} addAlert={this.props.addAlert} validator={validator} setWidth={this.props.setWidth}></NewProject>
                     </TabPanel>
                 </Paper>
             </TabContext>

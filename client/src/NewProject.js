@@ -188,7 +188,7 @@ class NewProject extends React.Component {
                                     this.setState({
                                         error: error
                                     })
-                                }} current={null} validator={this.props.validator}></Quota>
+                                }} current={null} validator={this.props.validator} setWidth={this.props.setWidth}></Quota>
                             </Grid>
                         )}
                     </div>

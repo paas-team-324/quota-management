@@ -26,6 +26,7 @@ class App extends React.Component {
 			cluster_dialog_open: false,
 			error: null,
 			colorTheme: colorThemes[false],
+			maxWidth: "md",
 
 			alerts: []
         };
@@ -34,6 +35,7 @@ class App extends React.Component {
 		this.request = this.request.bind(this)
 		this.addAlert = this.addAlert.bind(this)
 		this.closeAlert = this.closeAlert.bind(this)
+		this.setWidth = this.setWidth.bind(this)
     };
 
 	update_clusters_list() {
@@ -127,10 +129,31 @@ class App extends React.Component {
 		})
 	}
 
+	setWidth(quota_objects_amount) {
+
+		let width_to_min = {
+			"xl": 4, // max for lg is 3
+			"lg": 3, // max for md is 2
+			"md": 0
+		}
+
+		for (const [width, min] of Object.entries(width_to_min)) {
+
+			if (quota_objects_amount >= min) {
+				
+				this.setState({
+					maxWidth: width
+				})
+				return
+			}
+		}
+
+	}
+
     render () {
         return (
 			<ThemeProvider theme={this.state.colorTheme}>
-				<Container maxWidth="md">
+				<Container maxWidth={this.state.maxWidth}>
 					<AppBar color="primary">
 						<Toolbar>
 							<Grid item xs={5}>
@@ -192,7 +215,7 @@ class App extends React.Component {
 														onClick={() => this.setState({cluster_dialog_open: true})}>
 														{this.state.clusters[this.state.cluster]["displayName"]}
 													</Button>
-													<Cluster request={this.request} addAlert={this.addAlert} cluster={this.state.cluster}></Cluster>
+													<Cluster request={this.request} addAlert={this.addAlert} cluster={this.state.cluster} setWidth={this.setWidth}></Cluster>
 												</span>
 
 											)}

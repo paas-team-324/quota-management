@@ -197,7 +197,7 @@ class UpdateQuota extends React.Component {
                                                     this.setState({
                                                         init_error: error
                                                     })
-                                                }} current={this.state.current_quota} validator={this.props.validator}></Quota>
+                                                }} current={this.state.current_quota} validator={this.props.validator} setWidth={this.props.setWidth}></Quota>
 
                                             )
 
