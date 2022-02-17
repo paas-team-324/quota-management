@@ -20,10 +20,6 @@ class Cluster extends React.Component {
         };
     };
 
-    componentDidUpdate() {
-        console.log("cluster component updated")
-    }
-
     render () {
 
         return (
