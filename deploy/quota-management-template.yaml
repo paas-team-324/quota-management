@@ -64,7 +64,7 @@ objects:
     local: |
         {
             "displayName": "Local cluster",
-            "api": "https://kubernetes.default.svc:443",
+            "api": "https://openshift.default.svc:443",
             "production": false,
             "token": ""
         }
@@ -138,8 +138,6 @@ objects:
               path: /healthz
               port: 5000
           env:
-          - name: OAUTH_ENDPOINT
-            value: "https://${OAUTH_ENDPOINT}"
           - name: QUOTA_SCHEME_FILE
             value: "/app/scheme.json"
           - name: CLUSTERS_DIR
@@ -215,9 +213,6 @@ parameters:
 - description: Name for the quota managers group
   value: quota-managers
   name: QUOTA_MANAGERS_GROUP
-  required: true
-- description: Endpoint to use for authentication
-  name: OAUTH_ENDPOINT
   required: true
 - description: Docker image to use
   value: docker.io/vladpbr/quota-management:1.3

@@ -53,7 +53,7 @@ class Auth extends React.Component {
     }
 
     redirect() {
-        let redirectUrl = window.ENV.OAUTH_ENDPOINT + '/oauth/authorize?'
+        let redirectUrl = window.ENV.OAUTH_ENDPOINT + '?'
 
         // parameters passed to OpenShift OAuth server
         let redirectParams = new URLSearchParams({

@@ -212,7 +212,6 @@ class Config:
         # parse environment vars
         try:
             self.name = name
-            self.oauth_endpoint = os.environ["OAUTH_ENDPOINT"]
             self.oauth_client_id = f'system:serviceaccount:{os.environ["SERVICEACCOUNT_NAMESPACE"]}:{os.environ["SERVICEACCOUNT_NAME"]}'
             self.quota_scheme_path = os.environ["QUOTA_SCHEME_FILE"]
             self.clusters_dir = os.environ["CLUSTERS_DIR"]
@@ -270,6 +269,14 @@ class Config:
         else:
             self.insecure_requests = False
 
+        # get public authentication endpoint from cluster
+        self.oauth_endpoint = api_request(  "GET",
+                                            "/.well-known/oauth-authorization-server",
+                                            app_config=self,
+                                            local=True).json()["authorization_endpoint"]
+
+        config_logger.info("fetched authentication endpoint from cluster")
+
 config = None
 logger = None
 app = flask.Flask(__name__, static_folder=None, template_folder='ui/templates')
@@ -297,15 +304,19 @@ def abort(message, code):
     logger.debug(f"responded to client: {message}")
     flask.abort(flask.make_response(format_response(message), code ))
 
-def api_request(method, uri, params={}, json=None, contentType="application/json", dry_run=False, local=False):
+def api_request(method, uri, params={}, json=None, app_config=None, contentType="application/json", dry_run=False, local=False):
+
+    # if custom app config is not provided - use the global one
+    if not app_config:
+        app_config = config
 
     # distinguish between local and remote request
     if local:
-        api = "https://kubernetes.default.svc:443"
-        token = config.pod_token
+        api = "https://openshift.default.svc:443"
+        token = app_config.pod_token
     else:
-        api = config.clusters[request_context.cluster]['api']
-        token = config.clusters[request_context.cluster]['token']
+        api = app_config.clusters[request_context.cluster]['api']
+        token = app_config.clusters[request_context.cluster]['token']
 
     # make request
     try:
@@ -316,7 +327,7 @@ def api_request(method, uri, params={}, json=None, contentType="application/json
             "Connection": "close"
         },
         timeout=10,
-        verify=(False if config.insecure_requests else "/etc/ssl/certs/ca-certificates.crt"),
+        verify=(False if app_config.insecure_requests else "/etc/ssl/certs/ca-certificates.crt"),
         json=json,
         params={ **params, **( { "dryRun": "All" } if dry_run else {} ) })
         response.raise_for_status()
