@@ -5,13 +5,6 @@ metadata:
   annotations:
     description: "OpenShift application for easy management of resources for projects located across multiple clusters."
 objects:
-- apiVersion: oauth.openshift.io/v1
-  grantMethod: auto
-  kind: OAuthClient
-  metadata:
-    name: ${CLIENT_ID}
-  redirectURIs:
-  - https://quota-management.${ROUTER_CANONICAL_HOSTNAME}
 - apiVersion: user.openshift.io/v1
   kind: Group
   metadata:
@@ -78,6 +71,8 @@ objects:
 - apiVersion: v1
   kind: ServiceAccount
   metadata:
+    annotations:
+      serviceaccounts.openshift.io/oauth-redirectreference.first: "{\"kind\":\"OAuthRedirectReference\",\"apiVersion\":\"v1\",\"reference\":{\"kind\":\"Route\",\"name\":\"quota-management\"}}"
     name: quota-management
     namespace: ${NAMESPACE}
 - apiVersion: rbac.authorization.k8s.io/v1
@@ -145,8 +140,6 @@ objects:
           env:
           - name: OAUTH_ENDPOINT
             value: "https://${OAUTH_ENDPOINT}"
-          - name: OAUTH_CLIENT_ID
-            value: "${CLIENT_ID}"
           - name: QUOTA_SCHEME_FILE
             value: "/app/scheme.json"
           - name: CLUSTERS_DIR
@@ -155,6 +148,14 @@ objects:
             value: "${QUOTA_MANAGERS_GROUP}"
           - name: INSECURE_REQUESTS
             value: "${INSECURE_REQUESTS}"
+          - name: SERVICEACCOUNT_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.serviceAccountName
+          - name: SERVICEACCOUNT_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
           volumeMounts:
           - name: scheme
             mountPath: "/app/scheme.json"
@@ -196,7 +197,6 @@ objects:
     name: quota-management
     namespace: ${NAMESPACE}
   spec:
-    host: quota-management.${ROUTER_CANONICAL_HOSTNAME}
     to:
       kind: Service
       name: quota-management
@@ -210,10 +210,7 @@ objects:
 parameters:
 - description: Namespace in which to deploy the quota management
   name: NAMESPACE
-  required: true
-- description: Client ID for the UI to use
-  value: quota-management
-  name: CLIENT_ID
+  value: "quota-management"
   required: true
 - description: Name for the quota managers group
   value: quota-managers
@@ -221,9 +218,6 @@ parameters:
   required: true
 - description: Endpoint to use for authentication
   name: OAUTH_ENDPOINT
-  required: true
-- description: Router's wildcard DNS record
-  name: ROUTER_CANONICAL_HOSTNAME
   required: true
 - description: Docker image to use
   value: docker.io/vladpbr/quota-management:1.3

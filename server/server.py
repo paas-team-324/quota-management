@@ -213,7 +213,7 @@ class Config:
         try:
             self.name = name
             self.oauth_endpoint = os.environ["OAUTH_ENDPOINT"]
-            self.oauth_client_id = os.environ["OAUTH_CLIENT_ID"]
+            self.oauth_client_id = f'system:serviceaccount:{os.environ["SERVICEACCOUNT_NAMESPACE"]}:{os.environ["SERVICEACCOUNT_NAME"]}'
             self.quota_scheme_path = os.environ["QUOTA_SCHEME_FILE"]
             self.clusters_dir = os.environ["CLUSTERS_DIR"]
             self.quota_managers_group = os.environ["QUOTA_MANAGERS_GROUP"]

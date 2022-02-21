@@ -59,7 +59,8 @@ class Auth extends React.Component {
         let redirectParams = new URLSearchParams({
             client_id: window.ENV.OAUTH_CLIENT_ID,
             redirect_uri: window.location.origin,
-            response_type: 'token'
+            response_type: 'token',
+            scope: 'user:info'
         })
 
         // redirect to OAuth server
