@@ -348,7 +348,7 @@ def validate_params(request_args, args):
     # abort request if one of the args was not provided
     for arg in args:
         if arg not in request_args:
-            abort(f"missing '{arg}' query parameter", 400)
+            abort(f"missing '{arg}' parameter", 400)
 
 def validate_quota_manager(username):
 
@@ -404,11 +404,14 @@ def check_authorization():
     if flask.request.endpoint in disable_auth_for_routes:
         return
 
-    # make sure authentication token is present
-    validate_params(flask.request.args, [ "token", "cluster" ])
+    # make sure cluster query param present
+    validate_params(flask.request.args, [ "cluster" ])
+
+    # make sure authentication token header is present
+    validate_params(flask.request.headers, [ "Token" ])
 
     # make sure user is a quota manager
-    username = get_username(flask.request.args["token"])
+    username = get_username(flask.request.headers["Token"])
     validate_quota_manager(username)
 
     # make sure cluster is valid
@@ -562,8 +565,8 @@ def r_get_validation_quota():
 @app.route("/username", methods=["GET"])
 @do_not_authenticate
 def r_get_username():
-    validate_params(flask.request.args, [ "token" ])
-    return get_username(flask.request.args["token"]), 200
+    validate_params(flask.request.headers, [ "Token" ])
+    return get_username(flask.request.headers["Token"]), 200
 
 @app.route("/clusters", methods=["GET"])
 @do_not_authenticate

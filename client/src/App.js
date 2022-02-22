@@ -71,13 +71,15 @@ class App extends React.Component {
 
 	request(method, uri, query_params, data, callback) {
 
-		// add auth token and cluster to query params
-		query_params["token"] = this.state.token
+		// add cluster to query params
 		query_params["cluster"] = this.state.cluster
 
 		// prepare xhr request
 		let xhr_request = new XMLHttpRequest()
 		xhr_request.open(method, uri + "?" + new URLSearchParams(query_params).toString())
+
+		// add token header
+		xhr_request.setRequestHeader("Token", this.state.token)
 
 		// API response callback
 		xhr_request.onreadystatechange = function() {

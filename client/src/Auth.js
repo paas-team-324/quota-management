@@ -20,7 +20,10 @@ class Auth extends React.Component {
         if (urlParams.has('access_token')) {
             
             let xhr_request = new XMLHttpRequest()
-            xhr_request.open("GET", "/username?" + new URLSearchParams({ token: urlParams.get('access_token') }).toString())
+            xhr_request.open("GET", "/username")
+
+            // set token header
+            xhr_request.setRequestHeader("Token", urlParams.get('access_token'))
 
             // API response callback
             xhr_request.onreadystatechange = function() {
