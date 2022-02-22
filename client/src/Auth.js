@@ -30,6 +30,9 @@ class Auth extends React.Component {
                     // finish authentication if username is valid
                     if (xhr_request.status == 200) {
 
+                        // push root state without query params in order to hide them
+                        window.history.replaceState({}, null, "/")
+
                         this.props.finishAuthentication(urlParams.get('access_token'), xhr_request.responseText)
 
                     // redirect to OAuth if username is invalid
