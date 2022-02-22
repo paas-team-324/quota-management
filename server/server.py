@@ -212,8 +212,7 @@ class Config:
         # parse environment vars
         try:
             self.name = name
-            self.oauth_endpoint = os.environ["OAUTH_ENDPOINT"]
-            self.oauth_client_id = os.environ["OAUTH_CLIENT_ID"]
+            self.oauth_client_id = f'system:serviceaccount:{os.environ["SERVICEACCOUNT_NAMESPACE"]}:{os.environ["SERVICEACCOUNT_NAME"]}'
             self.quota_scheme_path = os.environ["QUOTA_SCHEME_FILE"]
             self.clusters_dir = os.environ["CLUSTERS_DIR"]
             self.quota_managers_group = os.environ["QUOTA_MANAGERS_GROUP"]
@@ -270,6 +269,14 @@ class Config:
         else:
             self.insecure_requests = False
 
+        # get public authentication endpoint from cluster
+        self.oauth_endpoint = api_request(  "GET",
+                                            "/.well-known/oauth-authorization-server",
+                                            app_config=self,
+                                            local=True).json()["authorization_endpoint"]
+
+        config_logger.info("fetched authentication endpoint from cluster")
+
 config = None
 logger = None
 app = flask.Flask(__name__, static_folder=None, template_folder='ui/templates')
@@ -297,15 +304,19 @@ def abort(message, code):
     logger.debug(f"responded to client: {message}")
     flask.abort(flask.make_response(format_response(message), code ))
 
-def api_request(method, uri, params={}, json=None, contentType="application/json", dry_run=False, local=False):
+def api_request(method, uri, params={}, json=None, app_config=None, contentType="application/json", dry_run=False, local=False):
+
+    # if custom app config is not provided - use the global one
+    if not app_config:
+        app_config = config
 
     # distinguish between local and remote request
     if local:
-        api = "https://kubernetes.default.svc:443"
-        token = config.pod_token
+        api = "https://openshift.default.svc:443"
+        token = app_config.pod_token
     else:
-        api = config.clusters[request_context.cluster]['api']
-        token = config.clusters[request_context.cluster]['token']
+        api = app_config.clusters[request_context.cluster]['api']
+        token = app_config.clusters[request_context.cluster]['token']
 
     # make request
     try:
@@ -316,7 +327,7 @@ def api_request(method, uri, params={}, json=None, contentType="application/json
             "Connection": "close"
         },
         timeout=10,
-        verify=(False if config.insecure_requests else "/etc/ssl/certs/ca-certificates.crt"),
+        verify=(False if app_config.insecure_requests else "/etc/ssl/certs/ca-certificates.crt"),
         json=json,
         params={ **params, **( { "dryRun": "All" } if dry_run else {} ) })
         response.raise_for_status()
@@ -337,7 +348,7 @@ def validate_params(request_args, args):
     # abort request if one of the args was not provided
     for arg in args:
         if arg not in request_args:
-            abort(f"missing '{arg}' query parameter", 400)
+            abort(f"missing '{arg}' parameter", 400)
 
 def validate_quota_manager(username):
 
@@ -393,11 +404,14 @@ def check_authorization():
     if flask.request.endpoint in disable_auth_for_routes:
         return
 
-    # make sure authentication token is present
-    validate_params(flask.request.args, [ "token", "cluster" ])
+    # make sure cluster query param present
+    validate_params(flask.request.args, [ "cluster" ])
+
+    # make sure authentication token header is present
+    validate_params(flask.request.headers, [ "Token" ])
 
     # make sure user is a quota manager
-    username = get_username(flask.request.args["token"])
+    username = get_username(flask.request.headers["Token"])
     validate_quota_manager(username)
 
     # make sure cluster is valid
@@ -410,7 +424,6 @@ def check_authorization():
 
 @app.after_request
 def after_request(response):
-    # response.headers['Access-Control-Allow-Origin'] = '*'
     response.headers['Access-Control-Allow-Methods'] = 'GET, PUT, POST'
     return response
 
@@ -419,7 +432,7 @@ def internal_server_error(error):
     logger.error(error.original_exception)
     return flask.jsonify(format_response(error.description)), 500
 
-def do_not_authorize(route):
+def do_not_authenticate(route):
     disable_auth_for_routes.append(route.__name__)
     return route
 
@@ -521,17 +534,17 @@ def patch_quota(user_scheme, project, username, dry_run=False):
 # ========== UI ==========
 
 @app.route("/static/<path:filename>", methods=["GET"])
-@do_not_authorize
+@do_not_authenticate
 def r_get_static(filename):
     return flask.send_from_directory('ui/static', filename)
 
 @app.route("/<any('',favicon.ico):element>", methods=["GET"])
-@do_not_authorize
+@do_not_authenticate
 def r_get_ui(element):
     return flask.send_from_directory('ui', element or 'index.html')
 
 @app.route("/env.js", methods=["GET"])
-@do_not_authorize
+@do_not_authenticate
 def r_get_env():
     return flask.Response(flask.render_template('env.js', oauth_endpoint=config.oauth_endpoint, oauth_client_id=config.oauth_client_id), mimetype="text/javascript")
 
@@ -550,13 +563,13 @@ def r_get_validation_quota():
     return flask.jsonify(config.schemas.quota)
 
 @app.route("/username", methods=["GET"])
-@do_not_authorize
+@do_not_authenticate
 def r_get_username():
-    validate_params(flask.request.args, [ "token" ])
-    return get_username(flask.request.args["token"]), 200
+    validate_params(flask.request.headers, [ "Token" ])
+    return get_username(flask.request.headers["Token"]), 200
 
 @app.route("/clusters", methods=["GET"])
-@do_not_authorize
+@do_not_authenticate
 def r_get_clusters():
 
     # return jsonified cluster names with relevant info
@@ -634,7 +647,7 @@ def r_post_projects():
     return flask.jsonify(format_response(f"project '{new_project}' has been successfully created on cluster '{config.clusters[request_context.cluster]['displayName']}'")), 200
 
 @app.route("/healthz", methods=["GET"])
-@do_not_authorize
+@do_not_authenticate
 @do_not_log
 def healthz():
     return "OK", 200

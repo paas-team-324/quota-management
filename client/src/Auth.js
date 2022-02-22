@@ -20,7 +20,10 @@ class Auth extends React.Component {
         if (urlParams.has('access_token')) {
             
             let xhr_request = new XMLHttpRequest()
-            xhr_request.open("GET", window.ENV.BACKEND_ROUTE + "/username" + "?" + new URLSearchParams({ token: urlParams.get('access_token') }).toString())
+            xhr_request.open("GET", "/username")
+
+            // set token header
+            xhr_request.setRequestHeader("Token", urlParams.get('access_token'))
 
             // API response callback
             xhr_request.onreadystatechange = function() {
@@ -29,6 +32,9 @@ class Auth extends React.Component {
 
                     // finish authentication if username is valid
                     if (xhr_request.status == 200) {
+
+                        // push root state without query params in order to hide them
+                        window.history.replaceState({}, null, "/")
 
                         this.props.finishAuthentication(urlParams.get('access_token'), xhr_request.responseText)
 
@@ -53,13 +59,14 @@ class Auth extends React.Component {
     }
 
     redirect() {
-        let redirectUrl = window.ENV.OAUTH_ENDPOINT + '/oauth/authorize?'
+        let redirectUrl = window.ENV.OAUTH_ENDPOINT + '?'
 
         // parameters passed to OpenShift OAuth server
         let redirectParams = new URLSearchParams({
             client_id: window.ENV.OAUTH_CLIENT_ID,
             redirect_uri: window.location.origin,
-            response_type: 'token'
+            response_type: 'token',
+            scope: 'user:info'
         })
 
         // redirect to OAuth server
