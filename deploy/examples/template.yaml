@@ -19,7 +19,6 @@ objects:
   kind: ResourceQuota
   metadata:
     name: compute
-    namespace: quota-management-test
   spec:
     hard:
       pods: "0"
@@ -29,7 +28,6 @@ objects:
   kind: ResourceQuota
   metadata:
     name: storage
-    namespace: quota-management-test
   spec:
     hard:
       persistentvolumeclaims: "0"
