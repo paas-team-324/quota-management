@@ -430,7 +430,7 @@ def internal_server_error(error):
     logger.error(error.original_exception)
     return flask.jsonify(format_response(error.description)), 500
 
-def do_not_authorize(route):
+def do_not_authenticate(route):
     disable_auth_for_routes.append(route.__name__)
     return route
 
@@ -532,17 +532,17 @@ def patch_quota(user_scheme, project, username, dry_run=False):
 # ========== UI ==========
 
 @app.route("/static/<path:filename>", methods=["GET"])
-@do_not_authorize
+@do_not_authenticate
 def r_get_static(filename):
     return flask.send_from_directory('ui/static', filename)
 
 @app.route("/<any('',favicon.ico):element>", methods=["GET"])
-@do_not_authorize
+@do_not_authenticate
 def r_get_ui(element):
     return flask.send_from_directory('ui', element or 'index.html')
 
 @app.route("/env.js", methods=["GET"])
-@do_not_authorize
+@do_not_authenticate
 def r_get_env():
     return flask.Response(flask.render_template('env.js', oauth_endpoint=config.oauth_endpoint, oauth_client_id=config.oauth_client_id), mimetype="text/javascript")
 
@@ -561,13 +561,13 @@ def r_get_validation_quota():
     return flask.jsonify(config.schemas.quota)
 
 @app.route("/username", methods=["GET"])
-@do_not_authorize
+@do_not_authenticate
 def r_get_username():
     validate_params(flask.request.args, [ "token" ])
     return get_username(flask.request.args["token"]), 200
 
 @app.route("/clusters", methods=["GET"])
-@do_not_authorize
+@do_not_authenticate
 def r_get_clusters():
 
     # return jsonified cluster names with relevant info
@@ -645,7 +645,7 @@ def r_post_projects():
     return flask.jsonify(format_response(f"project '{new_project}' has been successfully created on cluster '{config.clusters[request_context.cluster]['displayName']}'")), 200
 
 @app.route("/healthz", methods=["GET"])
-@do_not_authorize
+@do_not_authenticate
 @do_not_log
 def healthz():
     return "OK", 200
