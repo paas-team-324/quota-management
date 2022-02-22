@@ -315,8 +315,10 @@ class Config:
 
         config_logger.info("fetched authentication endpoint from cluster")
 
+        # prepare general logger
+        self.logger = get_logger(self.name)
+
 config = None
-logger = None
 app = flask.Flask(__name__, static_folder=None, template_folder='ui/templates')
 disable_auth_for_routes = []
 disable_logging_for_routes = []
@@ -339,7 +341,7 @@ def format_response(message):
     return { "message": message[0].upper() + message[1:] }
 
 def abort(message, code):
-    logger.debug(f"responded to client: {message}")
+    config.logger.debug(f"responded to client: {message}")
     flask.abort(flask.make_response(format_response(message), code ))
 
 def api_request(method, uri, params={}, json=None, app_config=None, contentType="application/json", dry_run=False, local=False):
@@ -376,7 +378,7 @@ def api_request(method, uri, params={}, json=None, app_config=None, contentType=
 
     # error during the request itself
     except requests.exceptions.RequestException as error:
-        logger.error(error)
+        app_config.logger.error(error)
         abort("an unexpected error has occurred", 500)
 
     return response
@@ -467,7 +469,7 @@ def after_request(response):
 
 @app.errorhandler(500)
 def internal_server_error(error):
-    logger.error(error.original_exception)
+    config.logger.error(error.original_exception)
     return flask.jsonify(format_response(error.description)), 500
 
 def do_not_authenticate(route):
@@ -535,7 +537,7 @@ def patch_quota(user_scheme, project, username, dry_run=False):
             if quota_parameter_name in quota_used:
                 used_value = quota_used[quota_parameter_name]
             else:
-                logger.warning(f"'{quota_parameter_name}' not found in '.status.used' of '{quota_object_name}' resource quota object in project '{project}'")
+                config.logger.warning(f"'{quota_parameter_name}' not found in '.status.used' of '{quota_object_name}' resource quota object in project '{project}'")
                 used_value = "0"
 
             used_value_decimal = parse_quantity(used_value)
@@ -567,7 +569,7 @@ def patch_quota(user_scheme, project, username, dry_run=False):
                     contentType="application/strategic-merge-patch+json",
                     dry_run=dry_run)
         if not dry_run:
-            logger.info(f"user '{username}' has updated the '{patch['name']}' quota for project '{project}' on cluster '{request_context.cluster}': {patch['data']['spec']['hard']}")
+            config.logger.info(f"user '{username}' has updated the '{patch['name']}' quota for project '{project}' on cluster '{request_context.cluster}': {patch['data']['spec']['hard']}")
 
 # ========== UI ==========
 
@@ -650,7 +652,7 @@ def r_post_projects():
                     }
                 })
 
-    logger.info(f"user '{request_context.username}' has created a project called '{new_project}' on cluster '{request_context.cluster}'")
+    config.logger.info(f"user '{request_context.username}' has created a project called '{new_project}' on cluster '{request_context.cluster}'")
 
     # patch new project's quota
     patch_quota(get_request_json(flask.request), new_project, request_context.username, dry_run=False)
@@ -680,7 +682,7 @@ def r_post_projects():
                     ]
                 })
 
-    logger.info(f"user '{request_context.username}' has assigned '{admin_user_name}' as admin of project '{new_project}' on cluster '{request_context.cluster}'")
+    config.logger.info(f"user '{request_context.username}' has assigned '{admin_user_name}' as admin of project '{new_project}' on cluster '{request_context.cluster}'")
 
     return flask.jsonify(format_response(f"project '{new_project}' has been successfully created on cluster '{config.clusters[request_context.cluster]['displayName']}'")), 200
 
@@ -759,11 +761,6 @@ if __name__ == "__main__":
 
     # instantiate global objects
     config = Config("quota-manager")
-    logger = get_logger(config.name)
-
-    log_file_handler = QuotaLogFileHandler("/tmp/quota.log")
-    log_file_handler.setFormatter(QUOTA_LOGFORMATTER)
-    logger.addHandler(log_file_handler)
 
     # disable dictionary sorting on flask.jsonify()
     # this way the quota scheme fields stay in the same order on client
