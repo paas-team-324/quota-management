@@ -20,8 +20,8 @@ OpenShift application for easy management of resources for projects located with
 1.  (Disconnected environment) Run `make disconnected-files` and transfer all the files in "./disconnected" directory to your environment
 2.  Run `oc new-project <project-name>` to create a new project for the application. Make sure the project has enough quota:
     - 4 pods (2 for currently running instances, 2 for rolling updates)
-    - 400m CPU (200m for currently running instances, 200m for rolling updates)
-    - 256Mi Memory (128Mi for currently running instances, 128Mi for rolling updates)
+    - 200m CPU (100m for currently running instances, 100m for rolling updates)
+    - 512Mi Memory (256Mi for currently running instances, 256Mi for rolling updates)
 3.  (Disconnected environment) Push the transfered image to the internal repository of the project / other reachable registry
 4.  Process the application template like so:
 
