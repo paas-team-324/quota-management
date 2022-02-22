@@ -7,10 +7,15 @@ import json
 import os
 import jsonschema
 import re
+from datetime import datetime
+from logging.handlers import RotatingFileHandler, BaseRotatingHandler
 from flask import g as request_context
 from kubernetes.utils.quantity import parse_quantity
 from gevent.pywsgi import WSGIServer, WSGIHandler
 from werkzeug.exceptions import BadRequest
+
+# constants
+QUOTA_LOGFORMATTER = logging.Formatter('[%(asctime)s] - %(name)s - %(levelname)s - %(message)s')
 
 def get_logger(name):
 
@@ -24,7 +29,7 @@ def get_logger(name):
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
     log_handler = ExitOnExceptionHandler()
-    log_handler.setFormatter(logging.Formatter('[%(asctime)s] - %(name)s - %(levelname)s - %(message)s'))
+    log_handler.setFormatter(QUOTA_LOGFORMATTER)
     logger.addHandler(log_handler)
 
     return logger
@@ -58,6 +63,39 @@ class CustomWSGIHandler(WSGIHandler):
             (self._orig_status or self.status or '000').split()[0],
             length,
             delta)
+
+class QuotaLogFileHandler(RotatingFileHandler):
+
+    def __init__(self, filename, encoding=None, delay=False):
+        
+        # slightly edited version of the super method
+        # original method can be seen here:
+        # https://github.com/gevent/gevent/blob/4171bc513656d3916b8e4dfe4e8710431ab0d5d0/src/gevent/pywsgi.py#L910
+
+        self.originalFileName = filename
+        BaseRotatingHandler.__init__(self, self.get_new_filename(), 'a', encoding, delay)
+        self.maxBytes = 500
+
+    def doRollover(self):
+        
+        # slightly edited version of the super method
+        # original method can be seen here:
+        # https://github.com/gevent/gevent/blob/4171bc513656d3916b8e4dfe4e8710431ab0d5d0/src/gevent/pywsgi.py#L910
+
+        if self.stream:
+            self.stream.close()
+            self.stream = None
+
+        # record is always logged to path stored in "baseFilename"
+        # the original RotatingFileHandler would rename and therefore store current file aside
+        # here we just overwrite the current "baseFilename" to the new file name
+        self.baseFilename = self.get_new_filename()
+
+        if not self.delay:
+            self.stream = self._open()
+
+    def get_new_filename(self):
+        return self.originalFileName + '-' + datetime.now().strftime("%d-%m-%Y_%H-%M-%S-%f")
 
 class Config:
 
@@ -722,6 +760,10 @@ if __name__ == "__main__":
     # instantiate global objects
     config = Config("quota-manager")
     logger = get_logger(config.name)
+
+    log_file_handler = QuotaLogFileHandler("/tmp/quota.log")
+    log_file_handler.setFormatter(QUOTA_LOGFORMATTER)
+    logger.addHandler(log_file_handler)
 
     # disable dictionary sorting on flask.jsonify()
     # this way the quota scheme fields stay in the same order on client
