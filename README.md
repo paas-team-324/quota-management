@@ -27,9 +27,8 @@ OpenShift application for easy management of resources for projects located with
 
     ``` bash
     oc process -o yaml -f deploy/quota-management-template.yaml \
-        -p OAUTH_ENDPOINT=<cluster-oauth-endpoint (e.g. oauth-openshift.apps-crc.testing)> \
         -p IMAGE=<quota-management-image (only relevant for disconnected environments)> \
-        -p PULL_POLICY=<IfNotPresent/Always> \
+        -p ROUTE=<quota-management-custom-route-hostname (optional)> \
         > quota-management.yaml
     ```
 

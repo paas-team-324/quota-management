@@ -195,6 +195,7 @@ objects:
     name: quota-management
     namespace: ${NAMESPACE}
   spec:
+    host: "${ROUTE}"
     to:
       kind: Service
       name: quota-management
@@ -218,6 +219,9 @@ parameters:
   value: docker.io/vladpbr/quota-management:1.3
   name: IMAGE
   required: true
+- description: Route hostname to use
+  value: ""
+  name: ROUTE
 - description: Pull policy for the image
   value: IfNotPresent
   name: PULL_POLICY
