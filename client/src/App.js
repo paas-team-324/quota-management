@@ -77,7 +77,7 @@ class App extends React.Component {
 
 		// prepare xhr request
 		let xhr_request = new XMLHttpRequest()
-		xhr_request.open(method, window.ENV.BACKEND_ROUTE + uri + "?" + new URLSearchParams(query_params).toString())
+		xhr_request.open(method, uri + "?" + new URLSearchParams(query_params).toString())
 
 		// API response callback
 		xhr_request.onreadystatechange = function() {

@@ -72,7 +72,7 @@ objects:
   kind: ServiceAccount
   metadata:
     annotations:
-      serviceaccounts.openshift.io/oauth-redirectreference.first: "{\"kind\":\"OAuthRedirectReference\",\"apiVersion\":\"v1\",\"reference\":{\"kind\":\"Route\",\"name\":\"quota-management\"}}"
+      serviceaccounts.openshift.io/oauth-redirectreference.client: "{\"kind\":\"OAuthRedirectReference\",\"apiVersion\":\"v1\",\"reference\":{\"kind\":\"Route\",\"name\":\"quota-management\"}}"
     name: quota-management
     namespace: ${NAMESPACE}
 - apiVersion: rbac.authorization.k8s.io/v1
