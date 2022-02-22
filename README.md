@@ -88,6 +88,7 @@ Quota Management is developed using Git Feature Branch workflow - each feature s
    ```bash
    # create testing project
    oc new-project quota-management
+   oc adm policy add-role-to-user admin developer -n quota-management
 
    # configure project request to create ResourceQuota objects
    oc create -f deploy/examples/template.yaml
@@ -107,8 +108,18 @@ Quota Management is developed using Git Feature Branch workflow - each feature s
    make build-push VERSION=my-feature
    ```
 
-5. Deploy application as you normally would and test. Don't forget to specify the image parameter in `oc process` to be `IMAGE=image-registry.openshift-image-registry.svc:5000/quota-management/quota-management:my-feature`. You might also want to specify `PULL_POLICY=Always`.
-6. Once the feature is complete, push and create a pull request to `main`.
+5. Deploy application. Here is how to do it quickly for testing purposes:
+
+   ``` bash
+   # process template and deploy
+   oc process -o yaml -f deploy/quota-management-template.yaml -p PULL_POLICY=Always -p IMAGE=image-registry.openshift-image-registry.svc:5000/quota-management/quota-management:my-feature | oc create -f -
+
+   # let developer manage quota
+   oc patch group quota-managers --type='merge' --patch='{"users":["developer"]}'
+   ```
+
+6. Test the feature.
+7. Once the feature is complete, push and create a pull request to `main`.
 
 ### Releasing a new version
 
