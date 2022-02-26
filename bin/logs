@@ -1,3 +1,8 @@
 #!/bin/bash
 
-cat $LOG_STORAGE/quota.log* | sort
+if [ -z "$LOG_STORAGE" ]
+then
+    echo "error: persistent storage is not configured (LOG_STORAGE env var is not present)"
+else
+    cat $LOG_STORAGE/quota.log* | sort
+fi
