@@ -74,8 +74,9 @@ class QuotaLogFileHandler(RotatingFileHandler):
         # original method can be seen here:
         # https://github.com/python/cpython/blob/4560c7e605887fda3af63f8ce157abf94954d4d2/Lib/logging/handlers.py#L124
 
-        self.originalFileName = filename
+        self.originalFileName = os.path.join(filename, "quota.log")
         self.maxBytes = maxBytes
+        self.setFormatter(QUOTA_LOGFORMATTER)
 
         self.free_disk_space()
         BaseRotatingHandler.__init__(self, self.get_new_filename(), 'a', encoding, False)
@@ -338,17 +339,14 @@ class Config:
 
         config_logger.info("fetched authentication endpoint from cluster")
 
-        # configure persistent logging if specified
-        if os.environ.get("LOG_STORAGE", default=False):
-            
-            quota_log_handler = QuotaLogFileHandler(os.path.join(os.environ["LOG_STORAGE"], "quota.log"))
-            quota_log_handler.setFormatter(QUOTA_LOGFORMATTER)
-            self.logger.addHandler(quota_log_handler)
-
-            config_logger.info(f"persistent logs configured to be stored in {os.environ['LOG_STORAGE']}")
-
         # prepare general logger
         self.logger = get_logger(self.name)
+
+        # configure persistent logging if specified
+        if os.environ.get("LOG_STORAGE", default=False):
+
+            self.logger.addHandler(QuotaLogFileHandler(os.environ["LOG_STORAGE"]))
+            config_logger.info(f"persistent logs configured to be stored in {os.environ['LOG_STORAGE']}")
 
 config = None
 app = flask.Flask(__name__, static_folder=None, template_folder='ui/templates')
