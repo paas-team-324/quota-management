@@ -349,7 +349,7 @@ class Config:
             config_logger.info(f"persistent logs configured to be stored in {os.environ['LOG_STORAGE']}")
 
 config = None
-app = flask.Flask(__name__, static_folder=None, template_folder='ui/templates')
+app = flask.Flask(__name__, static_folder=None, template_folder='../ui/templates')
 disable_auth_for_routes = []
 disable_logging_for_routes = []
 
@@ -606,12 +606,12 @@ def patch_quota(user_scheme, project, username, dry_run=False):
 @app.route("/static/<path:filename>", methods=["GET"])
 @do_not_authenticate
 def r_get_static(filename):
-    return flask.send_from_directory('ui/static', filename)
+    return flask.send_from_directory('../ui/static', filename)
 
 @app.route("/<any('',favicon.ico):element>", methods=["GET"])
 @do_not_authenticate
 def r_get_ui(element):
-    return flask.send_from_directory('ui', element or 'index.html')
+    return flask.send_from_directory('../ui', element or 'index.html')
 
 @app.route("/env.js", methods=["GET"])
 @do_not_authenticate
