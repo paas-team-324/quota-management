@@ -7,6 +7,8 @@ import json
 import os
 import jsonschema
 import re
+import shutil
+import glob
 from datetime import datetime
 from logging.handlers import RotatingFileHandler, BaseRotatingHandler
 from flask import g as request_context
@@ -66,21 +68,23 @@ class CustomWSGIHandler(WSGIHandler):
 
 class QuotaLogFileHandler(RotatingFileHandler):
 
-    def __init__(self, filename, encoding=None, delay=False):
+    def __init__(self, filename, maxBytes=(1000 * 1000), encoding=None):
         
         # slightly edited version of the super method
         # original method can be seen here:
-        # https://github.com/gevent/gevent/blob/4171bc513656d3916b8e4dfe4e8710431ab0d5d0/src/gevent/pywsgi.py#L910
+        # https://github.com/python/cpython/blob/4560c7e605887fda3af63f8ce157abf94954d4d2/Lib/logging/handlers.py#L124
 
         self.originalFileName = filename
-        BaseRotatingHandler.__init__(self, self.get_new_filename(), 'a', encoding, delay)
-        self.maxBytes = 500
+        self.maxBytes = maxBytes
+
+        self.free_disk_space()
+        BaseRotatingHandler.__init__(self, self.get_new_filename(), 'a', encoding, False)
 
     def doRollover(self):
         
         # slightly edited version of the super method
         # original method can be seen here:
-        # https://github.com/gevent/gevent/blob/4171bc513656d3916b8e4dfe4e8710431ab0d5d0/src/gevent/pywsgi.py#L910
+        # https://github.com/python/cpython/blob/4560c7e605887fda3af63f8ce157abf94954d4d2/Lib/logging/handlers.py#L158
 
         if self.stream:
             self.stream.close()
@@ -90,12 +94,31 @@ class QuotaLogFileHandler(RotatingFileHandler):
         # the original RotatingFileHandler would rename and therefore store current file aside
         # here we just overwrite the current "baseFilename" to the new file name
         self.baseFilename = self.get_new_filename()
+        self.free_disk_space()
 
-        if not self.delay:
-            self.stream = self._open()
+        self.stream = self._open()
 
     def get_new_filename(self):
-        return self.originalFileName + '-' + datetime.now().strftime("%d-%m-%Y_%H-%M-%S-%f")
+        return f"{self.originalFileName}_{datetime.now().strftime('%d-%m-%Y_%H-%M-%S-%f')}"
+
+    def free_disk_space(self):
+
+        def get_free_disk_space():
+            _, _, free_disk_space = shutil.disk_usage(os.path.dirname(self.originalFileName))
+            return free_disk_space
+
+        # fetch all of the existing log files, sorted by creation time
+        existing_log_files = sorted(glob.glob(f"{self.originalFileName}*"), key=os.path.getctime)
+
+        # check if there is enough disk space for a new log file
+        while get_free_disk_space() < self.maxBytes:
+
+            # delete oldest log file
+
+            if len(existing_log_files) == 0:
+                raise Exception("not enough disk space for an additional log file")
+
+            os.remove(existing_log_files.pop(0))
 
 class Config:
 
@@ -314,6 +337,15 @@ class Config:
                                             local=True).json()["authorization_endpoint"]
 
         config_logger.info("fetched authentication endpoint from cluster")
+
+        # configure persistent logging if specified
+        if os.environ.get("LOG_STORAGE", default=False):
+            
+            quota_log_handler = QuotaLogFileHandler(os.path.join(os.environ["LOG_STORAGE"], "quota.log"))
+            quota_log_handler.setFormatter(QUOTA_LOGFORMATTER)
+            self.logger.addHandler(quota_log_handler)
+
+            config_logger.info(f"persistent logs configured to be stored in {os.environ['LOG_STORAGE']}")
 
         # prepare general logger
         self.logger = get_logger(self.name)
