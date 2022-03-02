@@ -7,10 +7,17 @@ import json
 import os
 import jsonschema
 import re
+import shutil
+import glob
+from datetime import datetime
+from logging.handlers import RotatingFileHandler, BaseRotatingHandler
 from flask import g as request_context
 from kubernetes.utils.quantity import parse_quantity
 from gevent.pywsgi import WSGIServer, WSGIHandler
 from werkzeug.exceptions import BadRequest
+
+# constants
+QUOTA_LOGFORMATTER = logging.Formatter('[%(asctime)s] - %(name)s - %(levelname)s - %(message)s')
 
 def get_logger(name):
 
@@ -24,7 +31,7 @@ def get_logger(name):
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
     log_handler = ExitOnExceptionHandler()
-    log_handler.setFormatter(logging.Formatter('[%(asctime)s] - %(name)s - %(levelname)s - %(message)s'))
+    log_handler.setFormatter(QUOTA_LOGFORMATTER)
     logger.addHandler(log_handler)
 
     return logger
@@ -58,6 +65,59 @@ class CustomWSGIHandler(WSGIHandler):
             (self._orig_status or self.status or '000').split()[0],
             length,
             delta)
+
+class QuotaLogFileHandler(RotatingFileHandler):
+
+    def __init__(self, filename, maxBytes=(1024 * 1024), encoding=None):
+        
+        # slightly edited version of the super method
+        # original method can be seen here:
+        # https://github.com/python/cpython/blob/4560c7e605887fda3af63f8ce157abf94954d4d2/Lib/logging/handlers.py#L124
+
+        self.originalFileName = os.path.join(filename, "quota.log")
+        self.maxBytes = maxBytes
+        self.setFormatter(QUOTA_LOGFORMATTER)
+
+        # calculate max amount of log files
+        total_disk_space, _, _ = shutil.disk_usage(os.path.dirname(self.originalFileName))
+        self.maxFiles = int(total_disk_space / maxBytes) - 1
+
+        self.free_disk_space()
+        BaseRotatingHandler.__init__(self, self.get_new_filename(), 'a', encoding, False)
+
+    def doRollover(self):
+        
+        # slightly edited version of the super method
+        # original method can be seen here:
+        # https://github.com/python/cpython/blob/4560c7e605887fda3af63f8ce157abf94954d4d2/Lib/logging/handlers.py#L158
+
+        if self.stream:
+            self.stream.close()
+            self.stream = None
+
+        # record is always logged to path stored in "baseFilename"
+        # the original RotatingFileHandler would rename and therefore store current file aside
+        # here we just overwrite the current "baseFilename" to the new file name
+        self.baseFilename = self.get_new_filename()
+        self.free_disk_space()
+
+        self.stream = self._open()
+
+    def get_new_filename(self):
+        return f"{self.originalFileName}_{datetime.now().strftime('%d-%m-%Y_%H-%M-%S-%f')}"
+
+    def free_disk_space(self):
+        
+        # fetch all of the existing log files, sorted by creation time
+        existing_log_files = sorted(glob.glob(f"{self.originalFileName}*"), key=os.path.getctime)
+
+        # if max amount of log files reached - delete oldest log file
+        while len(existing_log_files) >= self.maxFiles:
+
+            if len(existing_log_files) == 0:
+                raise Exception("not enough disk space for an additional log file")
+
+            os.remove(existing_log_files.pop(0))
 
 class Config:
 
@@ -277,9 +337,20 @@ class Config:
 
         config_logger.info("fetched authentication endpoint from cluster")
 
+        # prepare general logger
+        self.logger = get_logger(self.name)
+
+        # configure persistent logging if specified
+        if os.environ.get("LOG_STORAGE", default=False):
+
+            quota_log_handler = QuotaLogFileHandler(os.environ["LOG_STORAGE"])
+            quota_log_handler.setFormatter(QUOTA_LOGFORMATTER)
+            self.logger.addHandler(quota_log_handler)
+
+            config_logger.info(f"persistent logs configured to be stored in '{os.environ['LOG_STORAGE']}'")
+
 config = None
-logger = None
-app = flask.Flask(__name__, static_folder=None, template_folder='ui/templates')
+app = flask.Flask(__name__, static_folder=None, template_folder='../ui/templates')
 disable_auth_for_routes = []
 disable_logging_for_routes = []
 
@@ -301,7 +372,7 @@ def format_response(message):
     return { "message": message[0].upper() + message[1:] }
 
 def abort(message, code):
-    logger.debug(f"responded to client: {message}")
+    config.logger.debug(f"responded to client: {message}")
     flask.abort(flask.make_response(format_response(message), code ))
 
 def api_request(method, uri, params={}, json=None, app_config=None, contentType="application/json", dry_run=False, local=False):
@@ -338,7 +409,7 @@ def api_request(method, uri, params={}, json=None, app_config=None, contentType=
 
     # error during the request itself
     except requests.exceptions.RequestException as error:
-        logger.error(error)
+        app_config.logger.error(error)
         abort("an unexpected error has occurred", 500)
 
     return response
@@ -429,7 +500,7 @@ def after_request(response):
 
 @app.errorhandler(500)
 def internal_server_error(error):
-    logger.error(error.original_exception)
+    config.logger.error(error.original_exception)
     return flask.jsonify(format_response(error.description)), 500
 
 def do_not_authenticate(route):
@@ -497,7 +568,7 @@ def patch_quota(user_scheme, project, username, dry_run=False):
             if quota_parameter_name in quota_used:
                 used_value = quota_used[quota_parameter_name]
             else:
-                logger.warning(f"'{quota_parameter_name}' not found in '.status.used' of '{quota_object_name}' resource quota object in project '{project}'")
+                config.logger.warning(f"'{quota_parameter_name}' not found in '.status.used' of '{quota_object_name}' resource quota object in project '{project}'")
                 used_value = "0"
 
             used_value_decimal = parse_quantity(used_value)
@@ -529,19 +600,19 @@ def patch_quota(user_scheme, project, username, dry_run=False):
                     contentType="application/strategic-merge-patch+json",
                     dry_run=dry_run)
         if not dry_run:
-            logger.info(f"user '{username}' has updated the '{patch['name']}' quota for project '{project}' on cluster '{request_context.cluster}': {patch['data']['spec']['hard']}")
+            config.logger.info(f"user '{username}' has updated the '{patch['name']}' quota for project '{project}' on cluster '{request_context.cluster}': {patch['data']['spec']['hard']}")
 
 # ========== UI ==========
 
 @app.route("/static/<path:filename>", methods=["GET"])
 @do_not_authenticate
 def r_get_static(filename):
-    return flask.send_from_directory('ui/static', filename)
+    return flask.send_from_directory('../ui/static', filename)
 
 @app.route("/<any('',favicon.ico):element>", methods=["GET"])
 @do_not_authenticate
 def r_get_ui(element):
-    return flask.send_from_directory('ui', element or 'index.html')
+    return flask.send_from_directory('../ui', element or 'index.html')
 
 @app.route("/env.js", methods=["GET"])
 @do_not_authenticate
@@ -612,7 +683,7 @@ def r_post_projects():
                     }
                 })
 
-    logger.info(f"user '{request_context.username}' has created a project called '{new_project}' on cluster '{request_context.cluster}'")
+    config.logger.info(f"user '{request_context.username}' has created a project called '{new_project}' on cluster '{request_context.cluster}'")
 
     # patch new project's quota
     patch_quota(get_request_json(flask.request), new_project, request_context.username, dry_run=False)
@@ -642,7 +713,7 @@ def r_post_projects():
                     ]
                 })
 
-    logger.info(f"user '{request_context.username}' has assigned '{admin_user_name}' as admin of project '{new_project}' on cluster '{request_context.cluster}'")
+    config.logger.info(f"user '{request_context.username}' has assigned '{admin_user_name}' as admin of project '{new_project}' on cluster '{request_context.cluster}'")
 
     return flask.jsonify(format_response(f"project '{new_project}' has been successfully created on cluster '{config.clusters[request_context.cluster]['displayName']}'")), 200
 
@@ -721,7 +792,6 @@ if __name__ == "__main__":
 
     # instantiate global objects
     config = Config("quota-manager")
-    logger = get_logger(config.name)
 
     # disable dictionary sorting on flask.jsonify()
     # this way the quota scheme fields stay in the same order on client
