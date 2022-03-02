@@ -68,7 +68,7 @@ class CustomWSGIHandler(WSGIHandler):
 
 class QuotaLogFileHandler(RotatingFileHandler):
 
-    def __init__(self, filename, maxBytes=(1000 * 1000), encoding=None):
+    def __init__(self, filename, maxBytes=(1024 * 1024), encoding=None):
         
         # slightly edited version of the super method
         # original method can be seen here:
@@ -77,6 +77,10 @@ class QuotaLogFileHandler(RotatingFileHandler):
         self.originalFileName = os.path.join(filename, "quota.log")
         self.maxBytes = maxBytes
         self.setFormatter(QUOTA_LOGFORMATTER)
+
+        # calculate max amount of log files
+        total_disk_space, _, _ = shutil.disk_usage(os.path.dirname(self.originalFileName))
+        self.maxFiles = int(total_disk_space / maxBytes) - 1
 
         self.free_disk_space()
         BaseRotatingHandler.__init__(self, self.get_new_filename(), 'a', encoding, False)
@@ -103,18 +107,12 @@ class QuotaLogFileHandler(RotatingFileHandler):
         return f"{self.originalFileName}_{datetime.now().strftime('%d-%m-%Y_%H-%M-%S-%f')}"
 
     def free_disk_space(self):
-
-        def get_free_disk_space():
-            _, _, free_disk_space = shutil.disk_usage(os.path.dirname(self.originalFileName))
-            return free_disk_space
-
+        
         # fetch all of the existing log files, sorted by creation time
         existing_log_files = sorted(glob.glob(f"{self.originalFileName}*"), key=os.path.getctime)
 
-        # check if there is enough disk space for a new log file
-        while get_free_disk_space() < self.maxBytes:
-
-            # delete oldest log file
+        # if max amount of log files reached - delete oldest log file
+        while len(existing_log_files) >= self.maxFiles:
 
             if len(existing_log_files) == 0:
                 raise Exception("not enough disk space for an additional log file")
@@ -345,8 +343,11 @@ class Config:
         # configure persistent logging if specified
         if os.environ.get("LOG_STORAGE", default=False):
 
-            self.logger.addHandler(QuotaLogFileHandler(os.environ["LOG_STORAGE"]))
-            config_logger.info(f"persistent logs configured to be stored in {os.environ['LOG_STORAGE']}")
+            quota_log_handler = QuotaLogFileHandler(os.environ["LOG_STORAGE"])
+            quota_log_handler.setFormatter(QUOTA_LOGFORMATTER)
+            self.logger.addHandler(quota_log_handler)
+
+            config_logger.info(f"persistent logs configured to be stored in '{os.environ['LOG_STORAGE']}'")
 
 config = None
 app = flask.Flask(__name__, static_folder=None, template_folder='../ui/templates')
