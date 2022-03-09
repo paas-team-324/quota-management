@@ -112,7 +112,7 @@ class ResourceQuota extends React.Component {
             quota: quota
         })
 
-        this.props.edit(this.props.name, quota)
+        this.props.edit("quota", this.props.name, quota)
     }
 
     render() {
@@ -164,12 +164,21 @@ class Quota extends React.Component {
                 // if current was not provided, init a zero value quota
                 if (this.props.current == null) {
 
-                    for (const resourcequota_name in scheme) {
-                        quota[resourcequota_name] = {}
-                        for (const parameter_name in scheme[resourcequota_name]) {
-                            quota[resourcequota_name][parameter_name] = {}
-                            quota[resourcequota_name][parameter_name]["value"] = "0"
-                            quota[resourcequota_name][parameter_name]["units"] = Array.isArray(scheme[resourcequota_name][parameter_name]["units"]) ? scheme[resourcequota_name][parameter_name]["units"][0] : scheme[resourcequota_name][parameter_name]["units"]
+                    quota["labels"] = {}
+                    quota["quota"] = {}
+
+                    // init labels with empty values
+                    for (const label_name in scheme["labels"]) {
+                        quota["labels"][label_name] = ""
+                    }
+
+                    // init quota with empty values
+                    for (const resourcequota_name in scheme["quota"]) {
+                        quota["quota"][resourcequota_name] = {}
+                        for (const parameter_name in scheme["quota"][resourcequota_name]) {
+                            quota["quota"][resourcequota_name][parameter_name] = {}
+                            quota["quota"][resourcequota_name][parameter_name]["value"] = "0"
+                            quota["quota"][resourcequota_name][parameter_name]["units"] = Array.isArray(scheme["quota"][resourcequota_name][parameter_name]["units"]) ? scheme["quota"][resourcequota_name][parameter_name]["units"][0] : scheme["quota"][resourcequota_name][parameter_name]["units"]
                         }
                     }
 
@@ -178,7 +187,7 @@ class Quota extends React.Component {
                 }
 
                 // set UI width based on amount of quota objects
-                this.props.setWidth(Object.keys(scheme).length)
+                this.props.setWidth(Object.keys(scheme["quota"]).length)
 
                 // fetch validation schema
                 this.props.request('GET', '/validation/scheme', {}, {}, function(response, ok) {
@@ -210,11 +219,11 @@ class Quota extends React.Component {
 
     }
 
-    edit(name, value) {
+    edit(field, name, value) {
 
         let quota = this.state.quota
 
-        quota[name] = value
+        quota[field][name] = value
 
         this.setState({
             quota: quota,
@@ -227,15 +236,15 @@ class Quota extends React.Component {
     render() {
 
         return this.state.validation != null ? (
-            Object.keys(this.state.scheme).map(quota_object_name =>
+            Object.keys(this.state.scheme["quota"]).map(quota_object_name =>
                 <Grid item xs={12 / Object.keys(this.state.scheme).length}>
                     <ResourceQuota
                         name={quota_object_name}
-                        fields={this.state.scheme[quota_object_name]}
-                        validation={this.state.validation["properties"][quota_object_name]}
+                        fields={this.state.scheme["quota"][quota_object_name]}
+                        validation={this.state.validation["properties"]["quota"]["properties"][quota_object_name]}
                         validator={this.props.validator}
                         edit={this.edit}
-                        current={this.state.quota[quota_object_name]}></ResourceQuota>
+                        current={this.state.quota["quota"][quota_object_name]}></ResourceQuota>
                 </Grid>
             )
         ) : (

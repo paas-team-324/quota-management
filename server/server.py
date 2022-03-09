@@ -597,13 +597,27 @@ def patch_quota(user_scheme, project, username, dry_run=False):
     except jsonschema.ValidationError as error:
         abort(f"user provided scheme is invalid: {error.message}", 400)
 
+    # patch project namespace with labels
+    config.api_request( "PATCH",
+                        f"/api/v1/namespaces/{project}",
+                        json=\
+                        {
+                            "metadata": {
+                                "labels": user_scheme["labels"]
+                            }
+                        },
+                        contentType="application/strategic-merge-patch+json",
+                        dry_run=dry_run)
+
+    config.logger.info(f"user '{username}' has updated the labels for project '{project}' on cluster '{request_context.cluster}': '{user_scheme['labels']}")
+
     # fetch quota objects for given project
     quota_objects = get_quota(project)
 
     patches = []
         
     # iterate quota objects
-    for quota_object_name in config.quota_scheme.keys():
+    for quota_object_name in config.quota_scheme["quota"].keys():
 
         parameters = {}
 
@@ -611,7 +625,7 @@ def patch_quota(user_scheme, project, username, dry_run=False):
         quota_used = quota_objects[quota_object_name]['status']['used']
 
         # iterate quota parameters
-        for quota_parameter_name in config.quota_scheme[quota_object_name].keys():
+        for quota_parameter_name in config.quota_scheme["quota"][quota_object_name].keys():
 
             # parameter might not exist in 'used' fields which might be a sign of misconfiguration of project template quota or quota scheme
             if quota_parameter_name in quota_used:
@@ -622,11 +636,11 @@ def patch_quota(user_scheme, project, username, dry_run=False):
 
             used_value_decimal = parse_quantity(used_value)
 
-            new_value = f"{user_scheme[quota_object_name][quota_parameter_name]['value']}{user_scheme[quota_object_name][quota_parameter_name]['units']}"
+            new_value = f"{user_scheme['quota'][quota_object_name][quota_parameter_name]['value']}{user_scheme['quota'][quota_object_name][quota_parameter_name]['units']}"
 
             # check if new quota value is smaller than currently used
             if parse_quantity(new_value).compare(used_value_decimal) == -1:
-                abort(f"new '{ config.quota_scheme[quota_object_name][quota_parameter_name]['name']}' quota value is smaller than currently used - new: '{new_value}', used: '{normalize_decimal(used_value_decimal)}'", 400)
+                abort(f"new '{ config.quota_scheme['quota'][quota_object_name][quota_parameter_name]['name']}' quota value is smaller than currently used - new: '{new_value}', used: '{normalize_decimal(used_value_decimal)}'", 400)
 
             # append parameter
             parameters[quota_parameter_name] = new_value
