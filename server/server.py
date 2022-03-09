@@ -68,19 +68,15 @@ class CustomWSGIHandler(WSGIHandler):
 
 class QuotaLogFileHandler(RotatingFileHandler):
 
-    def __init__(self, filename, maxBytes=(1024 * 1024), encoding=None):
+    def __init__(self, log_dir, maxBytes=(1024 * 1024), encoding=None):
         
         # slightly edited version of the super method
         # original method can be seen here:
         # https://github.com/python/cpython/blob/4560c7e605887fda3af63f8ce157abf94954d4d2/Lib/logging/handlers.py#L124
 
-        self.originalFileName = os.path.join(filename, "quota.log")
+        self.originalFileName = os.path.join(log_dir, "quota.log")
         self.maxBytes = maxBytes
         self.setFormatter(QUOTA_LOGFORMATTER)
-
-        # calculate max amount of log files
-        total_disk_space, _, _ = shutil.disk_usage(os.path.dirname(self.originalFileName))
-        self.maxFiles = int(total_disk_space / maxBytes) - 1
 
         self.free_disk_space()
         BaseRotatingHandler.__init__(self, self.get_new_filename(), 'a', encoding, False)
@@ -107,12 +103,16 @@ class QuotaLogFileHandler(RotatingFileHandler):
         return f"{self.originalFileName}_{datetime.now().strftime('%d-%m-%Y_%H-%M-%S-%f')}"
 
     def free_disk_space(self):
+
+        # calculate max amount of log files
+        total_disk_space, _, _ = shutil.disk_usage(os.path.dirname(self.originalFileName))
+        maxFiles = int(total_disk_space / self.maxBytes) - 1
         
         # fetch all of the existing log files, sorted by creation time
         existing_log_files = sorted(glob.glob(f"{self.originalFileName}*"), key=os.path.getctime)
 
         # if max amount of log files reached - delete oldest log file
-        while len(existing_log_files) >= self.maxFiles:
+        while len(existing_log_files) >= maxFiles:
 
             if len(existing_log_files) == 0:
                 raise Exception("not enough disk space for an additional log file")
