@@ -330,10 +330,9 @@ class Config:
             self.insecure_requests = False
 
         # get public authentication endpoint from cluster
-        self.oauth_endpoint = api_request(  "GET",
-                                            "/.well-known/oauth-authorization-server",
-                                            app_config=self,
-                                            local=True).json()["authorization_endpoint"]
+        self.oauth_endpoint = self.api_request( "GET",
+                                                "/.well-known/oauth-authorization-server",
+                                                local=True).json()["authorization_endpoint"]
 
         config_logger.info("fetched authentication endpoint from cluster")
 
@@ -348,6 +347,44 @@ class Config:
             self.logger.addHandler(quota_log_handler)
 
             config_logger.info(f"persistent logs configured to be stored in '{os.environ['LOG_STORAGE']}'")
+
+    
+    def api_request(self, method, uri, params={}, json=None, contentType="application/json", dry_run=False, local=False):
+
+        # distinguish between local and remote request
+        if local:
+            api = "https://openshift.default.svc:443"
+            token = self.pod_token
+        else:
+            api = self.clusters[request_context.cluster]['api']
+            token = self.clusters[request_context.cluster]['token']
+
+        # make request
+        try:
+            response = requests.request(method, api + uri, headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": contentType,
+                "Accept": "application/json",
+                "Connection": "close"
+            },
+            timeout=10,
+            verify=(False if self.insecure_requests else "/etc/ssl/certs/ca-certificates.crt"),
+            json=json,
+            params={ **params, **( { "dryRun": "All" } if dry_run else {} ) })
+
+            response.raise_for_status()
+
+        # error received from the API
+        except requests.exceptions.HTTPError as error:
+            abort(error.response.json()['message'], 502)
+
+        # error during the request itself
+        except requests.exceptions.RequestException as error:
+            self.logger.error(error)
+            abort("an unexpected error has occurred", 500)
+
+        return response
+
 
 config = None
 app = flask.Flask(__name__, static_folder=None, template_folder='../ui/templates')
@@ -375,45 +412,6 @@ def abort(message, code):
     config.logger.debug(f"responded to client: {message}")
     flask.abort(flask.make_response(format_response(message), code ))
 
-def api_request(method, uri, params={}, json=None, app_config=None, contentType="application/json", dry_run=False, local=False):
-
-    # if custom app config is not provided - use the global one
-    if not app_config:
-        app_config = config
-
-    # distinguish between local and remote request
-    if local:
-        api = "https://openshift.default.svc:443"
-        token = app_config.pod_token
-    else:
-        api = app_config.clusters[request_context.cluster]['api']
-        token = app_config.clusters[request_context.cluster]['token']
-
-    # make request
-    try:
-        response = requests.request(method, api + uri, headers={
-            "Authorization": f"Bearer {token}",
-            "Content-Type": contentType,
-            "Accept": "application/json",
-            "Connection": "close"
-        },
-        timeout=10,
-        verify=(False if app_config.insecure_requests else "/etc/ssl/certs/ca-certificates.crt"),
-        json=json,
-        params={ **params, **( { "dryRun": "All" } if dry_run else {} ) })
-        response.raise_for_status()
-
-    # error received from the API
-    except requests.exceptions.HTTPError as error:
-        abort(error.response.json()['message'], 502)
-
-    # error during the request itself
-    except requests.exceptions.RequestException as error:
-        app_config.logger.error(error)
-        abort("an unexpected error has occurred", 500)
-
-    return response
-
 def validate_params(request_args, args):
 
     # abort request if one of the args was not provided
@@ -424,8 +422,8 @@ def validate_params(request_args, args):
 def validate_quota_manager(username):
 
     # fetch list of quota managers
-    managers_list = api_request("GET",
-                                f"/apis/user.openshift.io/v1/groups/{config.quota_managers_group}", local=True).json()["users"]
+    managers_list = config.api_request( "GET",
+                                        f"/apis/user.openshift.io/v1/groups/{config.quota_managers_group}", local=True).json()["users"]
 
     # make sure user can manage quota
     if type(managers_list) != list or username not in managers_list:
@@ -453,8 +451,8 @@ def get_request_json(request):
 def get_project_list():
 
     # query API
-    response = api_request( "GET",
-                            "/api/v1/resourcequotas")
+    response = config.api_request(  "GET",
+                                    "/api/v1/resourcequotas")
 
     # prepare unique list of projects with quota objects
     projects = []
@@ -514,17 +512,17 @@ def do_not_log(route):
 def get_username(token):
 
     # review user token
-    review_result = api_request("POST",
-                                "/apis/authentication.k8s.io/v1/tokenreviews",
-                                local=True,
-                                json=\
-                                    {
-                                        "kind": "TokenReview",
-                                        "apiVersion": "authentication.k8s.io/v1",
-                                        "spec": {
-                                            "token": token
-                                        }
-                                    }).json()
+    review_result = config.api_request( "POST",
+                                        "/apis/authentication.k8s.io/v1/tokenreviews",
+                                        local=True,
+                                        json=\
+                                            {
+                                                "kind": "TokenReview",
+                                                "apiVersion": "authentication.k8s.io/v1",
+                                                "spec": {
+                                                    "token": token
+                                                }
+                                            }).json()
 
     # return username from review
     try:
@@ -535,8 +533,8 @@ def get_username(token):
 def get_quota(project):
 
     # fetch quota objects for given project
-    quota_objects = api_request("GET",
-                                f"/api/v1/namespaces/{project}/resourcequotas").json()
+    quota_objects = config.api_request( "GET",
+                                        f"/api/v1/namespaces/{project}/resourcequotas").json()
 
     return { quota_object['metadata']['name']:quota_object for quota_object in quota_objects['items'] }
 
@@ -594,11 +592,11 @@ def patch_quota(user_scheme, project, username, dry_run=False):
 
     # update each quota object separately
     for patch in patches:
-        api_request("PATCH",
-                    f"/api/v1/namespaces/{project}/resourcequotas/{patch['name']}",
-                    json=patch["data"],
-                    contentType="application/strategic-merge-patch+json",
-                    dry_run=dry_run)
+        config.api_request( "PATCH",
+                            f"/api/v1/namespaces/{project}/resourcequotas/{patch['name']}",
+                            json=patch["data"],
+                            contentType="application/strategic-merge-patch+json",
+                            dry_run=dry_run)
         if not dry_run:
             config.logger.info(f"user '{username}' has updated the '{patch['name']}' quota for project '{project}' on cluster '{request_context.cluster}': {patch['data']['spec']['hard']}")
 
@@ -673,15 +671,15 @@ def r_post_projects():
     new_project = flask.request.args["project"]
 
     # request project creation
-    api_request("POST",
-                "/apis/project.openshift.io/v1/projectrequests",
-                json={
-                    "kind": "ProjectRequest",
-                    "apiVersion": "project.openshift.io/v1",
-                    "metadata": {
-                        "name": new_project
-                    }
-                })
+    config.api_request( "POST",
+                        "/apis/project.openshift.io/v1/projectrequests",
+                        json={
+                            "kind": "ProjectRequest",
+                            "apiVersion": "project.openshift.io/v1",
+                            "metadata": {
+                                "name": new_project
+                            }
+                        })
 
     config.logger.info(f"user '{request_context.username}' has created a project called '{new_project}' on cluster '{request_context.cluster}'")
 
@@ -689,29 +687,29 @@ def r_post_projects():
     patch_quota(get_request_json(flask.request), new_project, request_context.username, dry_run=False)
 
     # assign admin to project
-    api_request("POST",
-                f"/apis/authorization.openshift.io/v1/namespaces/{new_project}/rolebindings",
-                dry_run=False,
-                json={
-                    "kind": "RoleBinding",
-                    "apiVersion": "authorization.openshift.io/v1",
-                    "metadata": {
-                        "name": f"admin-{admin_user_name}",
-                        "namespace": new_project
-                    },
-                    "roleRef": {
-                        "apiGroup": "rbac.authorization.k8s.io",
-                        "kind": "ClusterRole",
-                        "name": "admin"
-                    },
-                    "subjects": [
-                        {
-                            "apiGroup": "rbac.authorization.k8s.io",
-                            "kind": "User",
-                            "name": admin_user_name
-                        }
-                    ]
-                })
+    config.api_request( "POST",
+                        f"/apis/authorization.openshift.io/v1/namespaces/{new_project}/rolebindings",
+                        dry_run=False,
+                        json={
+                            "kind": "RoleBinding",
+                            "apiVersion": "authorization.openshift.io/v1",
+                            "metadata": {
+                                "name": f"admin-{admin_user_name}",
+                                "namespace": new_project
+                            },
+                            "roleRef": {
+                                "apiGroup": "rbac.authorization.k8s.io",
+                                "kind": "ClusterRole",
+                                "name": "admin"
+                            },
+                            "subjects": [
+                                {
+                                    "apiGroup": "rbac.authorization.k8s.io",
+                                    "kind": "User",
+                                    "name": admin_user_name
+                                }
+                            ]
+                        })
 
     config.logger.info(f"user '{request_context.username}' has assigned '{admin_user_name}' as admin of project '{new_project}' on cluster '{request_context.cluster}'")
 
