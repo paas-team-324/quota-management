@@ -166,33 +166,48 @@ class Config:
             # this is how a quota scheme should look like
             scheme_file = \
             {
+
                 "type": "object",
-                "minProperties": 1,
                 "additionalProperties": False,
-                "patternProperties": {
-                    "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$": {
+                "required": [ "labels", "quota" ],
+                "properties": {
+                    "labels": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "patternProperties": { 
+                            "^(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]){,63}$": { "type": "string" }
+                        },
+                    },
+                    "quota": {
                         "type": "object",
                         "minProperties": 1,
-                        "additionalProperties": {
-                            "type": "object",
-                            "additionalProperties": False,
-                            "required": [ "name", "units", "type" ],
-                            "properties": {
-                                "name": { "type": "string" },
-                                "units": {
-                                    "anyOf": [
-                                        {
-                                            "enum": _valid_units
+                        "additionalProperties": False,
+                        "patternProperties": {
+                            "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$": {
+                                "type": "object",
+                                "minProperties": 1,
+                                "additionalProperties": {
+                                    "type": "object",
+                                    "additionalProperties": False,
+                                    "required": [ "name", "units", "type" ],
+                                    "properties": {
+                                        "name": { "type": "string" },
+                                        "units": {
+                                            "anyOf": [
+                                                {
+                                                    "enum": _valid_units
+                                                },
+                                                {
+                                                    "type": "array",
+                                                    "minItems": 2,
+                                                    "uniqueItems": True,
+                                                    "items": { "enum": _valid_units }
+                                                }
+                                            ]
                                         },
-                                        {
-                                            "type": "array",
-                                            "minItems": 2,
-                                            "uniqueItems": True,
-                                            "items": { "enum": _valid_units }
-                                        }
-                                    ]
-                                },
-                                "type": { "type": "string", "enum": list(data_types.keys()) },
+                                        "type": { "type": "string", "enum": list(data_types.keys()) },
+                                    }
+                                }
                             }
                         }
                     }
@@ -214,8 +229,24 @@ class Config:
 
                 schema_logger.info("quota scheme validated")
 
+                # generate label schema based on input
+                label_schema = \
+                {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": [],
+                    "properties": {}
+                }
+
+                # iterate label names
+                for label_name in quota["labels"].keys():
+
+                    # set current label as required, provide value constraints
+                    label_schema["required"].append(label_name)
+                    label_schema["properties"][label_name] = { "type": "string", "pattern": "^(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?$" }
+
                 # generate quota schema based on input
-                self.quota = \
+                quota_schema = \
                 {
                     "type": "object",
                     "additionalProperties": False,
@@ -224,11 +255,11 @@ class Config:
                 }
 
                 # iterate quota objects
-                for quota_object_name in quota.keys():
+                for quota_object_name in quota["quota"].keys():
 
                     # set current quota object as required, forbid any other keys
-                    self.quota["required"].append(quota_object_name)
-                    self.quota["properties"][quota_object_name] = \
+                    quota_schema["required"].append(quota_object_name)
+                    quota_schema["properties"][quota_object_name] = \
                     {
                         "type": "object",
                         "additionalProperties": False,
@@ -237,22 +268,34 @@ class Config:
                     }
 
                     # iterate quota parameters
-                    for quota_parameter_name in quota[quota_object_name].keys():
+                    for quota_parameter_name in quota["quota"][quota_object_name].keys():
 
-                        valid_units = quota[quota_object_name][quota_parameter_name]["units"]
+                        valid_units = quota["quota"][quota_object_name][quota_parameter_name]["units"]
 
                         # set current 'hard' quota parameter as required, forbid any other keys
-                        self.quota["properties"][quota_object_name]["required"].append(quota_parameter_name)
-                        self.quota["properties"][quota_object_name]["properties"][quota_parameter_name] = \
+                        quota_schema["properties"][quota_object_name]["required"].append(quota_parameter_name)
+                        quota_schema["properties"][quota_object_name]["properties"][quota_parameter_name] = \
                         {
                             "type": "object",
                             "additionalProperties": False,
                             "required": [ "value", "units" ],
                             "properties": {
-                                "value": { "type": "string", "pattern":  self.data_types[quota[quota_object_name][quota_parameter_name]["type"]] },
+                                "value": { "type": "string", "pattern":  self.data_types[quota["quota"][quota_object_name][quota_parameter_name]["type"]] },
                                 "units": { "type": "string", "enum": valid_units if isinstance(valid_units, list) else [ valid_units ] }
                             }
                         }
+
+                # combine schemas into a single user input validation schema
+                self.quota = \
+                {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": [ "labels", "quota" ],
+                    "properties": {
+                        "labels": label_schema,
+                        "quota": quota_schema
+                    }
+                }
 
                 schema_logger.info("user quota scheme generated")
 
@@ -538,6 +581,14 @@ def get_quota(project):
 
     return { quota_object['metadata']['name']:quota_object for quota_object in quota_objects['items'] }
 
+def get_labels(project):
+
+    # fetch namespace object
+    namespace = config.api_request( "GET",
+                                    f"/api/v1/namespaces/{project}").json()
+
+    return { label:namespace["metadata"].get("labels", {}).get(label, "") for label in config.quota_scheme["labels"].keys() }
+
 def patch_quota(user_scheme, project, username, dry_run=False):
 
     # validate user quota scheme
@@ -734,22 +785,27 @@ def r_get_quota():
     # make sure project is managed
     validate_namespace(flask.request.args['project'])
 
-    # fetch quota objects for given project
+    # fetch quota objects and labels for given project
     quota_objects = get_quota(flask.request.args['project'])
+    labels = get_labels(flask.request.args['project'])
 
     # prepare project quota JSON to be returned
-    project_quota = {}
+    project_quota = \
+    {
+        "labels": labels,
+        "quota": {}
+    }
 
     # iterate quota objects
-    for quota_object_name in config.quota_scheme.keys():
+    for quota_object_name in config.quota_scheme["quota"].keys():
 
-        project_quota[quota_object_name] = {}
+        project_quota["quota"][quota_object_name] = {}
 
         # store current quota object
         quota_object = quota_objects[quota_object_name]
 
         # iterate quota parameters
-        for quota_parameter_name in config.quota_scheme[quota_object_name].keys():
+        for quota_parameter_name in config.quota_scheme["quota"][quota_object_name].keys():
 
             # get current value
             try:
@@ -758,14 +814,14 @@ def r_get_quota():
                 abort(f"quota parameter '{quota_parameter_name}' is not defined in '{quota_object_name}' resource quota in project '{flask.request.args['project']}'", 502)
 
             # get desired units
-            config_units = config.quota_scheme[quota_object_name][quota_parameter_name]["units"]
+            config_units = config.quota_scheme["quota"][quota_object_name][quota_parameter_name]["units"]
             units = config_units[0] if isinstance(config_units, list) else config_units
 
             # convert to desired quantity based on units
             value_decimal /= parse_quantity(f"1{units}")
 
             # strip trailing zeroes, format as float and set in return JSON
-            project_quota[quota_object_name][quota_parameter_name] = {
+            project_quota["quota"][quota_object_name][quota_parameter_name] = {
                 "value": normalize_decimal(value_decimal),
                 "units": units
             }
