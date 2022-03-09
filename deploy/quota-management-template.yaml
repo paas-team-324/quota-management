@@ -146,6 +146,8 @@ objects:
             value: "${QUOTA_MANAGERS_GROUP}"
           - name: INSECURE_REQUESTS
             value: "${INSECURE_REQUESTS}"
+          - name: LOG_STORAGE
+            value: ""
           - name: SERVICEACCOUNT_NAME
             valueFrom:
               fieldRef:
