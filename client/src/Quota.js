@@ -1,5 +1,5 @@
 import React from 'react';
-import { TextField, Grid, MenuItem, Box, CircularProgress } from '@material-ui/core';
+import { TextField, Grid, MenuItem, Box, CircularProgress, Divider } from '@material-ui/core';
 
 const DATA_TYPE_DESCRIPTIONS = {
     "int": "Whole non-negative number",
@@ -131,6 +131,49 @@ class ResourceQuota extends React.Component {
 
 }
 
+class Label extends React.Component {
+
+    constructor(props) {
+        super(props);
+
+        this.state = {
+            value: this.props.current,
+            valid: true
+        };
+
+        this.validate = this.validate.bind(this)
+    };
+
+    validate(value) {
+
+        // set field text and check for validation errors
+        this.setState({
+            value: value,
+            valid: this.props.validator.validate(value, this.props.validation).errors.length == 0
+        })
+
+        // edit quota object
+        this.props.edit("labels", this.props.name, value)
+        
+    }
+
+    render() {
+        return (
+            <TextField
+                id={this.props.name}
+                name={this.props.name}
+                label={this.props.displayname}
+                value={this.state.value}
+                onChange={event => this.validate(event.target.value)}
+                error={!this.state.valid}
+                InputLabelProps={{ shrink: true }}
+                fullWidth
+            />
+        )
+    }
+
+}
+
 class Quota extends React.Component {
 
     constructor(props) {
@@ -236,17 +279,39 @@ class Quota extends React.Component {
     render() {
 
         return this.state.validation != null ? (
-            Object.keys(this.state.scheme["quota"]).map(quota_object_name =>
-                <Grid item xs={12 / Object.keys(this.state.scheme).length}>
-                    <ResourceQuota
-                        name={quota_object_name}
-                        fields={this.state.scheme["quota"][quota_object_name]}
-                        validation={this.state.validation["properties"]["quota"]["properties"][quota_object_name]}
-                        validator={this.props.validator}
-                        edit={this.edit}
-                        current={this.state.quota["quota"][quota_object_name]}></ResourceQuota>
+            <Grid item xs={12}>
+                <Divider style={{ marginBottom: '4%' }}/>
+                <Grid container spacing={3}>
+
+                    {/* project labels */}
+                    {Object.keys(this.state.scheme["labels"]).map(label =>
+                        <Grid item xs={6 / Object.keys(this.state.scheme["labels"]).length}>
+                            <Label
+                                name={label}
+                                displayname={this.state.scheme["labels"][label]}
+                                current={this.state.quota["labels"][label]}
+                                validation={this.state.validation["properties"]["labels"]["properties"][label]}
+                                validator={this.props.validator}
+                                edit={this.edit}
+                                ></Label>
+                        </Grid>
+                    )}
+                    <Grid item xs={6}></Grid>
+                
+                    {/* project quota */}
+                    {Object.keys(this.state.scheme["quota"]).map(quota_object_name =>
+                        <Grid item xs={12 / Object.keys(this.state.scheme["quota"]).length}>
+                            <ResourceQuota
+                                name={quota_object_name}
+                                fields={this.state.scheme["quota"][quota_object_name]}
+                                validation={this.state.validation["properties"]["quota"]["properties"][quota_object_name]}
+                                validator={this.props.validator}
+                                edit={this.edit}
+                                current={this.state.quota["quota"][quota_object_name]}></ResourceQuota>
+                        </Grid>
+                    )}
                 </Grid>
-            )
+            </Grid>
         ) : (
             <Grid item xs={12}>
                 <div style={{display: 'flex', justifyContent:'center', alignItems:'center'}}>
