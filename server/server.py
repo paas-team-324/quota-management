@@ -9,6 +9,7 @@ import jsonschema
 import re
 import shutil
 import glob
+import bisect
 from datetime import datetime
 from logging.handlers import RotatingFileHandler, BaseRotatingHandler
 from flask import g as request_context
@@ -18,6 +19,7 @@ from werkzeug.exceptions import BadRequest
 
 # constants
 QUOTA_LOGFORMATTER = logging.Formatter('[%(asctime)s] - %(name)s - %(levelname)s - %(message)s')
+INFRA_PROJECTS_REGEX = r"(^openshift-|^kube-|^openshift$|^default$)"
 
 def get_logger(name):
 
@@ -499,15 +501,41 @@ def get_project_list():
 
     # prepare unique list of projects with quota objects
     projects = []
-    infra_projects_regex = r"(^openshift-|^kube-|^openshift$|^default$)"
     for resourcequota in response.json()["items"]:
-        if resourcequota["metadata"]["namespace"] not in projects and not re.match(infra_projects_regex, resourcequota["metadata"]["namespace"]):
+        if resourcequota["metadata"]["namespace"] not in projects and not re.match(INFRA_PROJECTS_REGEX, resourcequota["metadata"]["namespace"]):
             projects.append(resourcequota["metadata"]["namespace"])
 
     # return project names
     return {
         "projects": projects
     }
+
+def get_label_list():
+    
+    # query API
+    response = config.api_request(  "GET",
+                                    "/api/v1/namespaces")
+
+    # init return value
+    labels = { label:[] for label in config.quota_scheme["labels"].keys() }
+
+    for namespace in response.json()["items"]:
+        
+        # filter infra projects
+        if not re.match(INFRA_PROJECTS_REGEX, namespace["metadata"]["name"]):
+
+            for label in config.quota_scheme["labels"].keys():
+
+                # get label value from current namespace
+                label_value = namespace["metadata"].get("labels", {}).get(label, "")
+
+                # if value is valid and is not yet in the list
+                if label_value and label_value not in labels[label]:
+                    
+                    # insert into list and keep it sorted
+                    bisect.insort(labels[label], label_value)
+
+    return labels
 
 @app.before_request
 def check_authorization():
@@ -711,6 +739,12 @@ def r_get_clusters():
                 "displayName": cluster["displayName"],
                 "production": cluster["production"]
             } for name, cluster in config.clusters.items() }
+
+@app.route("/labels", methods=["GET"])
+def r_get_labels():
+
+    # return jsonified labels
+    return flask.jsonify(get_label_list())
 
 @app.route("/projects", methods=["GET"])
 def r_get_projects():
