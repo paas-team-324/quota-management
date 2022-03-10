@@ -1,4 +1,4 @@
-FROM docker.io/library/node:12.4.0-alpine as build
+FROM docker.io/library/node:14.18 as build
 
 # build ui
 WORKDIR /build
