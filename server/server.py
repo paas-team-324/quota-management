@@ -9,6 +9,7 @@ import jsonschema
 import re
 import shutil
 import glob
+import bisect
 from datetime import datetime
 from logging.handlers import RotatingFileHandler, BaseRotatingHandler
 from flask import g as request_context
@@ -18,6 +19,7 @@ from werkzeug.exceptions import BadRequest
 
 # constants
 QUOTA_LOGFORMATTER = logging.Formatter('[%(asctime)s] - %(name)s - %(levelname)s - %(message)s')
+INFRA_PROJECTS_REGEX = r"(^openshift-|^kube-|^openshift$|^default$)"
 
 def get_logger(name):
 
@@ -68,19 +70,15 @@ class CustomWSGIHandler(WSGIHandler):
 
 class QuotaLogFileHandler(RotatingFileHandler):
 
-    def __init__(self, filename, maxBytes=(1024 * 1024), encoding=None):
+    def __init__(self, log_dir, maxBytes=(1024 * 1024), encoding=None):
         
         # slightly edited version of the super method
         # original method can be seen here:
         # https://github.com/python/cpython/blob/4560c7e605887fda3af63f8ce157abf94954d4d2/Lib/logging/handlers.py#L124
 
-        self.originalFileName = os.path.join(filename, "quota.log")
+        self.originalFileName = os.path.join(log_dir, "quota.log")
         self.maxBytes = maxBytes
         self.setFormatter(QUOTA_LOGFORMATTER)
-
-        # calculate max amount of log files
-        total_disk_space, _, _ = shutil.disk_usage(os.path.dirname(self.originalFileName))
-        self.maxFiles = int(total_disk_space / maxBytes) - 1
 
         self.free_disk_space()
         BaseRotatingHandler.__init__(self, self.get_new_filename(), 'a', encoding, False)
@@ -107,12 +105,16 @@ class QuotaLogFileHandler(RotatingFileHandler):
         return f"{self.originalFileName}_{datetime.now().strftime('%d-%m-%Y_%H-%M-%S-%f')}"
 
     def free_disk_space(self):
+
+        # calculate max amount of log files
+        total_disk_space, _, _ = shutil.disk_usage(os.path.dirname(self.originalFileName))
+        maxFiles = int(total_disk_space / self.maxBytes) - 1
         
         # fetch all of the existing log files, sorted by creation time
         existing_log_files = sorted(glob.glob(f"{self.originalFileName}*"), key=os.path.getctime)
 
         # if max amount of log files reached - delete oldest log file
-        while len(existing_log_files) >= self.maxFiles:
+        while len(existing_log_files) >= maxFiles:
 
             if len(existing_log_files) == 0:
                 raise Exception("not enough disk space for an additional log file")
@@ -166,33 +168,48 @@ class Config:
             # this is how a quota scheme should look like
             scheme_file = \
             {
+
                 "type": "object",
-                "minProperties": 1,
                 "additionalProperties": False,
-                "patternProperties": {
-                    "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$": {
+                "required": [ "labels", "quota" ],
+                "properties": {
+                    "labels": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "patternProperties": { 
+                            "^(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]){,63}$": { "type": "string" }
+                        },
+                    },
+                    "quota": {
                         "type": "object",
                         "minProperties": 1,
-                        "additionalProperties": {
-                            "type": "object",
-                            "additionalProperties": False,
-                            "required": [ "name", "units", "type" ],
-                            "properties": {
-                                "name": { "type": "string" },
-                                "units": {
-                                    "anyOf": [
-                                        {
-                                            "enum": _valid_units
+                        "additionalProperties": False,
+                        "patternProperties": {
+                            "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$": {
+                                "type": "object",
+                                "minProperties": 1,
+                                "additionalProperties": {
+                                    "type": "object",
+                                    "additionalProperties": False,
+                                    "required": [ "name", "units", "type" ],
+                                    "properties": {
+                                        "name": { "type": "string" },
+                                        "units": {
+                                            "anyOf": [
+                                                {
+                                                    "enum": _valid_units
+                                                },
+                                                {
+                                                    "type": "array",
+                                                    "minItems": 2,
+                                                    "uniqueItems": True,
+                                                    "items": { "enum": _valid_units }
+                                                }
+                                            ]
                                         },
-                                        {
-                                            "type": "array",
-                                            "minItems": 2,
-                                            "uniqueItems": True,
-                                            "items": { "enum": _valid_units }
-                                        }
-                                    ]
-                                },
-                                "type": { "type": "string", "enum": list(data_types.keys()) },
+                                        "type": { "type": "string", "enum": list(data_types.keys()) },
+                                    }
+                                }
                             }
                         }
                     }
@@ -214,8 +231,24 @@ class Config:
 
                 schema_logger.info("quota scheme validated")
 
+                # generate label schema based on input
+                label_schema = \
+                {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": [],
+                    "properties": {}
+                }
+
+                # iterate label names
+                for label_name in quota["labels"].keys():
+
+                    # set current label as required, provide value constraints
+                    label_schema["required"].append(label_name)
+                    label_schema["properties"][label_name] = { "type": "string", "pattern": "^(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?$" }
+
                 # generate quota schema based on input
-                self.quota = \
+                quota_schema = \
                 {
                     "type": "object",
                     "additionalProperties": False,
@@ -224,11 +257,11 @@ class Config:
                 }
 
                 # iterate quota objects
-                for quota_object_name in quota.keys():
+                for quota_object_name in quota["quota"].keys():
 
                     # set current quota object as required, forbid any other keys
-                    self.quota["required"].append(quota_object_name)
-                    self.quota["properties"][quota_object_name] = \
+                    quota_schema["required"].append(quota_object_name)
+                    quota_schema["properties"][quota_object_name] = \
                     {
                         "type": "object",
                         "additionalProperties": False,
@@ -237,22 +270,34 @@ class Config:
                     }
 
                     # iterate quota parameters
-                    for quota_parameter_name in quota[quota_object_name].keys():
+                    for quota_parameter_name in quota["quota"][quota_object_name].keys():
 
-                        valid_units = quota[quota_object_name][quota_parameter_name]["units"]
+                        valid_units = quota["quota"][quota_object_name][quota_parameter_name]["units"]
 
                         # set current 'hard' quota parameter as required, forbid any other keys
-                        self.quota["properties"][quota_object_name]["required"].append(quota_parameter_name)
-                        self.quota["properties"][quota_object_name]["properties"][quota_parameter_name] = \
+                        quota_schema["properties"][quota_object_name]["required"].append(quota_parameter_name)
+                        quota_schema["properties"][quota_object_name]["properties"][quota_parameter_name] = \
                         {
                             "type": "object",
                             "additionalProperties": False,
                             "required": [ "value", "units" ],
                             "properties": {
-                                "value": { "type": "string", "pattern":  self.data_types[quota[quota_object_name][quota_parameter_name]["type"]] },
+                                "value": { "type": "string", "pattern":  self.data_types[quota["quota"][quota_object_name][quota_parameter_name]["type"]] },
                                 "units": { "type": "string", "enum": valid_units if isinstance(valid_units, list) else [ valid_units ] }
                             }
                         }
+
+                # combine schemas into a single user input validation schema
+                self.quota = \
+                {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": [ "labels", "quota" ],
+                    "properties": {
+                        "labels": label_schema,
+                        "quota": quota_schema
+                    }
+                }
 
                 schema_logger.info("user quota scheme generated")
 
@@ -330,10 +375,9 @@ class Config:
             self.insecure_requests = False
 
         # get public authentication endpoint from cluster
-        self.oauth_endpoint = api_request(  "GET",
-                                            "/.well-known/oauth-authorization-server",
-                                            app_config=self,
-                                            local=True).json()["authorization_endpoint"]
+        self.oauth_endpoint = self.api_request( "GET",
+                                                "/.well-known/oauth-authorization-server",
+                                                local=True).json()["authorization_endpoint"]
 
         config_logger.info("fetched authentication endpoint from cluster")
 
@@ -348,6 +392,44 @@ class Config:
             self.logger.addHandler(quota_log_handler)
 
             config_logger.info(f"persistent logs configured to be stored in '{os.environ['LOG_STORAGE']}'")
+
+    
+    def api_request(self, method, uri, params={}, json=None, contentType="application/json", dry_run=False, local=False):
+
+        # distinguish between local and remote request
+        if local:
+            api = "https://openshift.default.svc:443"
+            token = self.pod_token
+        else:
+            api = self.clusters[request_context.cluster]['api']
+            token = self.clusters[request_context.cluster]['token']
+
+        # make request
+        try:
+            response = requests.request(method, api + uri, headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": contentType,
+                "Accept": "application/json",
+                "Connection": "close"
+            },
+            timeout=10,
+            verify=(False if self.insecure_requests else "/etc/ssl/certs/ca-certificates.crt"),
+            json=json,
+            params={ **params, **( { "dryRun": "All" } if dry_run else {} ) })
+
+            response.raise_for_status()
+
+        # error received from the API
+        except requests.exceptions.HTTPError as error:
+            abort(error.response.json()['message'], 502)
+
+        # error during the request itself
+        except requests.exceptions.RequestException as error:
+            self.logger.error(error)
+            abort("an unexpected error has occurred", 500)
+
+        return response
+
 
 config = None
 app = flask.Flask(__name__, static_folder=None, template_folder='../ui/templates')
@@ -375,45 +457,6 @@ def abort(message, code):
     config.logger.debug(f"responded to client: {message}")
     flask.abort(flask.make_response(format_response(message), code ))
 
-def api_request(method, uri, params={}, json=None, app_config=None, contentType="application/json", dry_run=False, local=False):
-
-    # if custom app config is not provided - use the global one
-    if not app_config:
-        app_config = config
-
-    # distinguish between local and remote request
-    if local:
-        api = "https://openshift.default.svc:443"
-        token = app_config.pod_token
-    else:
-        api = app_config.clusters[request_context.cluster]['api']
-        token = app_config.clusters[request_context.cluster]['token']
-
-    # make request
-    try:
-        response = requests.request(method, api + uri, headers={
-            "Authorization": f"Bearer {token}",
-            "Content-Type": contentType,
-            "Accept": "application/json",
-            "Connection": "close"
-        },
-        timeout=10,
-        verify=(False if app_config.insecure_requests else "/etc/ssl/certs/ca-certificates.crt"),
-        json=json,
-        params={ **params, **( { "dryRun": "All" } if dry_run else {} ) })
-        response.raise_for_status()
-
-    # error received from the API
-    except requests.exceptions.HTTPError as error:
-        abort(error.response.json()['message'], 502)
-
-    # error during the request itself
-    except requests.exceptions.RequestException as error:
-        app_config.logger.error(error)
-        abort("an unexpected error has occurred", 500)
-
-    return response
-
 def validate_params(request_args, args):
 
     # abort request if one of the args was not provided
@@ -424,8 +467,8 @@ def validate_params(request_args, args):
 def validate_quota_manager(username):
 
     # fetch list of quota managers
-    managers_list = api_request("GET",
-                                f"/apis/user.openshift.io/v1/groups/{config.quota_managers_group}", local=True).json()["users"]
+    managers_list = config.api_request( "GET",
+                                        f"/apis/user.openshift.io/v1/groups/{config.quota_managers_group}", local=True).json()["users"]
 
     # make sure user can manage quota
     if type(managers_list) != list or username not in managers_list:
@@ -453,20 +496,46 @@ def get_request_json(request):
 def get_project_list():
 
     # query API
-    response = api_request( "GET",
-                            "/api/v1/resourcequotas")
+    response = config.api_request(  "GET",
+                                    "/api/v1/resourcequotas")
 
     # prepare unique list of projects with quota objects
     projects = []
-    infra_projects_regex = r"(^openshift-|^kube-|^openshift$|^default$)"
     for resourcequota in response.json()["items"]:
-        if resourcequota["metadata"]["namespace"] not in projects and not re.match(infra_projects_regex, resourcequota["metadata"]["namespace"]):
+        if resourcequota["metadata"]["namespace"] not in projects and not re.match(INFRA_PROJECTS_REGEX, resourcequota["metadata"]["namespace"]):
             projects.append(resourcequota["metadata"]["namespace"])
 
     # return project names
     return {
         "projects": projects
     }
+
+def get_label_list():
+    
+    # query API
+    response = config.api_request(  "GET",
+                                    "/api/v1/namespaces")
+
+    # init return value
+    labels = { label:[] for label in config.quota_scheme["labels"].keys() }
+
+    for namespace in response.json()["items"]:
+        
+        # filter infra projects
+        if not re.match(INFRA_PROJECTS_REGEX, namespace["metadata"]["name"]):
+
+            for label in config.quota_scheme["labels"].keys():
+
+                # get label value from current namespace
+                label_value = namespace["metadata"].get("labels", {}).get(label, "")
+
+                # if value is valid and is not yet in the list
+                if label_value and label_value not in labels[label]:
+                    
+                    # insert into list and keep it sorted
+                    bisect.insort(labels[label], label_value)
+
+    return labels
 
 @app.before_request
 def check_authorization():
@@ -514,17 +583,17 @@ def do_not_log(route):
 def get_username(token):
 
     # review user token
-    review_result = api_request("POST",
-                                "/apis/authentication.k8s.io/v1/tokenreviews",
-                                local=True,
-                                json=\
-                                    {
-                                        "kind": "TokenReview",
-                                        "apiVersion": "authentication.k8s.io/v1",
-                                        "spec": {
-                                            "token": token
-                                        }
-                                    }).json()
+    review_result = config.api_request( "POST",
+                                        "/apis/authentication.k8s.io/v1/tokenreviews",
+                                        local=True,
+                                        json=\
+                                            {
+                                                "kind": "TokenReview",
+                                                "apiVersion": "authentication.k8s.io/v1",
+                                                "spec": {
+                                                    "token": token
+                                                }
+                                            }).json()
 
     # return username from review
     try:
@@ -535,10 +604,18 @@ def get_username(token):
 def get_quota(project):
 
     # fetch quota objects for given project
-    quota_objects = api_request("GET",
-                                f"/api/v1/namespaces/{project}/resourcequotas").json()
+    quota_objects = config.api_request( "GET",
+                                        f"/api/v1/namespaces/{project}/resourcequotas").json()
 
     return { quota_object['metadata']['name']:quota_object for quota_object in quota_objects['items'] }
+
+def get_labels(project):
+
+    # fetch namespace object
+    namespace = config.api_request( "GET",
+                                    f"/api/v1/namespaces/{project}").json()
+
+    return { label:namespace["metadata"].get("labels", {}).get(label, "") for label in config.quota_scheme["labels"].keys() }
 
 def patch_quota(user_scheme, project, username, dry_run=False):
 
@@ -548,13 +625,27 @@ def patch_quota(user_scheme, project, username, dry_run=False):
     except jsonschema.ValidationError as error:
         abort(f"user provided scheme is invalid: {error.message}", 400)
 
+    # patch project namespace with labels
+    config.api_request( "PATCH",
+                        f"/api/v1/namespaces/{project}",
+                        json=\
+                        {
+                            "metadata": {
+                                "labels": user_scheme["labels"]
+                            }
+                        },
+                        contentType="application/strategic-merge-patch+json",
+                        dry_run=dry_run)
+
+    config.logger.info(f"user '{username}' has updated the labels for project '{project}' on cluster '{request_context.cluster}': '{user_scheme['labels']}")
+
     # fetch quota objects for given project
     quota_objects = get_quota(project)
 
     patches = []
         
     # iterate quota objects
-    for quota_object_name in config.quota_scheme.keys():
+    for quota_object_name in config.quota_scheme["quota"].keys():
 
         parameters = {}
 
@@ -562,7 +653,7 @@ def patch_quota(user_scheme, project, username, dry_run=False):
         quota_used = quota_objects[quota_object_name]['status']['used']
 
         # iterate quota parameters
-        for quota_parameter_name in config.quota_scheme[quota_object_name].keys():
+        for quota_parameter_name in config.quota_scheme["quota"][quota_object_name].keys():
 
             # parameter might not exist in 'used' fields which might be a sign of misconfiguration of project template quota or quota scheme
             if quota_parameter_name in quota_used:
@@ -573,11 +664,11 @@ def patch_quota(user_scheme, project, username, dry_run=False):
 
             used_value_decimal = parse_quantity(used_value)
 
-            new_value = f"{user_scheme[quota_object_name][quota_parameter_name]['value']}{user_scheme[quota_object_name][quota_parameter_name]['units']}"
+            new_value = f"{user_scheme['quota'][quota_object_name][quota_parameter_name]['value']}{user_scheme['quota'][quota_object_name][quota_parameter_name]['units']}"
 
             # check if new quota value is smaller than currently used
             if parse_quantity(new_value).compare(used_value_decimal) == -1:
-                abort(f"new '{ config.quota_scheme[quota_object_name][quota_parameter_name]['name']}' quota value is smaller than currently used - new: '{new_value}', used: '{normalize_decimal(used_value_decimal)}'", 400)
+                abort(f"new '{ config.quota_scheme['quota'][quota_object_name][quota_parameter_name]['name']}' quota value is smaller than currently used - new: '{new_value}', used: '{normalize_decimal(used_value_decimal)}'", 400)
 
             # append parameter
             parameters[quota_parameter_name] = new_value
@@ -594,11 +685,11 @@ def patch_quota(user_scheme, project, username, dry_run=False):
 
     # update each quota object separately
     for patch in patches:
-        api_request("PATCH",
-                    f"/api/v1/namespaces/{project}/resourcequotas/{patch['name']}",
-                    json=patch["data"],
-                    contentType="application/strategic-merge-patch+json",
-                    dry_run=dry_run)
+        config.api_request( "PATCH",
+                            f"/api/v1/namespaces/{project}/resourcequotas/{patch['name']}",
+                            json=patch["data"],
+                            contentType="application/strategic-merge-patch+json",
+                            dry_run=dry_run)
         if not dry_run:
             config.logger.info(f"user '{username}' has updated the '{patch['name']}' quota for project '{project}' on cluster '{request_context.cluster}': {patch['data']['spec']['hard']}")
 
@@ -649,6 +740,12 @@ def r_get_clusters():
                 "production": cluster["production"]
             } for name, cluster in config.clusters.items() }
 
+@app.route("/labels", methods=["GET"])
+def r_get_labels():
+
+    # return jsonified labels
+    return flask.jsonify(get_label_list())
+
 @app.route("/projects", methods=["GET"])
 def r_get_projects():
 
@@ -673,15 +770,15 @@ def r_post_projects():
     new_project = flask.request.args["project"]
 
     # request project creation
-    api_request("POST",
-                "/apis/project.openshift.io/v1/projectrequests",
-                json={
-                    "kind": "ProjectRequest",
-                    "apiVersion": "project.openshift.io/v1",
-                    "metadata": {
-                        "name": new_project
-                    }
-                })
+    config.api_request( "POST",
+                        "/apis/project.openshift.io/v1/projectrequests",
+                        json={
+                            "kind": "ProjectRequest",
+                            "apiVersion": "project.openshift.io/v1",
+                            "metadata": {
+                                "name": new_project
+                            }
+                        })
 
     config.logger.info(f"user '{request_context.username}' has created a project called '{new_project}' on cluster '{request_context.cluster}'")
 
@@ -689,29 +786,29 @@ def r_post_projects():
     patch_quota(get_request_json(flask.request), new_project, request_context.username, dry_run=False)
 
     # assign admin to project
-    api_request("POST",
-                f"/apis/authorization.openshift.io/v1/namespaces/{new_project}/rolebindings",
-                dry_run=False,
-                json={
-                    "kind": "RoleBinding",
-                    "apiVersion": "authorization.openshift.io/v1",
-                    "metadata": {
-                        "name": f"admin-{admin_user_name}",
-                        "namespace": new_project
-                    },
-                    "roleRef": {
-                        "apiGroup": "rbac.authorization.k8s.io",
-                        "kind": "ClusterRole",
-                        "name": "admin"
-                    },
-                    "subjects": [
-                        {
-                            "apiGroup": "rbac.authorization.k8s.io",
-                            "kind": "User",
-                            "name": admin_user_name
-                        }
-                    ]
-                })
+    config.api_request( "POST",
+                        f"/apis/authorization.openshift.io/v1/namespaces/{new_project}/rolebindings",
+                        dry_run=False,
+                        json={
+                            "kind": "RoleBinding",
+                            "apiVersion": "authorization.openshift.io/v1",
+                            "metadata": {
+                                "name": f"admin-{admin_user_name}",
+                                "namespace": new_project
+                            },
+                            "roleRef": {
+                                "apiGroup": "rbac.authorization.k8s.io",
+                                "kind": "ClusterRole",
+                                "name": "admin"
+                            },
+                            "subjects": [
+                                {
+                                    "apiGroup": "rbac.authorization.k8s.io",
+                                    "kind": "User",
+                                    "name": admin_user_name
+                                }
+                            ]
+                        })
 
     config.logger.info(f"user '{request_context.username}' has assigned '{admin_user_name}' as admin of project '{new_project}' on cluster '{request_context.cluster}'")
 
@@ -736,22 +833,27 @@ def r_get_quota():
     # make sure project is managed
     validate_namespace(flask.request.args['project'])
 
-    # fetch quota objects for given project
+    # fetch quota objects and labels for given project
     quota_objects = get_quota(flask.request.args['project'])
+    labels = get_labels(flask.request.args['project'])
 
     # prepare project quota JSON to be returned
-    project_quota = {}
+    project_quota = \
+    {
+        "labels": labels,
+        "quota": {}
+    }
 
     # iterate quota objects
-    for quota_object_name in config.quota_scheme.keys():
+    for quota_object_name in config.quota_scheme["quota"].keys():
 
-        project_quota[quota_object_name] = {}
+        project_quota["quota"][quota_object_name] = {}
 
         # store current quota object
         quota_object = quota_objects[quota_object_name]
 
         # iterate quota parameters
-        for quota_parameter_name in config.quota_scheme[quota_object_name].keys():
+        for quota_parameter_name in config.quota_scheme["quota"][quota_object_name].keys():
 
             # get current value
             try:
@@ -760,14 +862,14 @@ def r_get_quota():
                 abort(f"quota parameter '{quota_parameter_name}' is not defined in '{quota_object_name}' resource quota in project '{flask.request.args['project']}'", 502)
 
             # get desired units
-            config_units = config.quota_scheme[quota_object_name][quota_parameter_name]["units"]
+            config_units = config.quota_scheme["quota"][quota_object_name][quota_parameter_name]["units"]
             units = config_units[0] if isinstance(config_units, list) else config_units
 
             # convert to desired quantity based on units
             value_decimal /= parse_quantity(f"1{units}")
 
             # strip trailing zeroes, format as float and set in return JSON
-            project_quota[quota_object_name][quota_parameter_name] = {
+            project_quota["quota"][quota_object_name][quota_parameter_name] = {
                 "value": normalize_decimal(value_decimal),
                 "units": units
             }

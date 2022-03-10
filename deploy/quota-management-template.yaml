@@ -18,33 +18,39 @@ objects:
   data:
     scheme.json: |
       {
-          "compute": {
-              "pods": {
-                  "name": "Pods",
-                  "units": "",
-                  "type": "int"
-              },
-              "requests.cpu": {
-                  "name": "CPU Cores",
-                  "units": "",
-                  "type": "float"
-              },
-              "requests.memory": {
-                  "name": "Memory",
-                  "units": [ "Gi", "Mi" ],
-                  "type": "float"
-              }
+          "labels": {
+              "unit": "Unit",
+              "wing": "Wing"
           },
-          "storage": {
-              "requests.storage": {
-                  "name": "Storage",
-                  "units": "Gi",
-                  "type": "float"
+          "quota": {
+              "compute": {
+                  "pods": {
+                      "name": "Pods",
+                      "units": "",
+                      "type": "int"
+                  },
+                  "requests.cpu": {
+                      "name": "CPU Cores",
+                      "units": "",
+                      "type": "float"
+                  },
+                  "requests.memory": {
+                      "name": "Memory",
+                      "units": [ "Gi", "Mi" ],
+                      "type": "float"
+                  }
               },
-              "persistentvolumeclaims": {
-                  "name": "Persistent Volume Claims",
-                  "units": "",
-                  "type": "int"
+              "storage": {
+                  "requests.storage": {
+                      "name": "Storage",
+                      "units": "Gi",
+                      "type": "float"
+                  },
+                  "persistentvolumeclaims": {
+                      "name": "Persistent Volume Claims",
+                      "units": "",
+                      "type": "int"
+                  }
               }
           }
       }

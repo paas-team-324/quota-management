@@ -140,6 +140,7 @@ class NewProject extends React.Component {
                                                 </InputAdornment>
                                             )
                                         } : {} }
+                                        InputLabelProps={{ shrink: true }}
                                         fullWidth />
                                     </Typography>
                                 </Grid>
@@ -163,6 +164,7 @@ class NewProject extends React.Component {
                                                 </InputAdornment>
                                             )
                                         } : {} }
+                                        InputLabelProps={{ shrink: true }}
                                         fullWidth />
                                     </Typography>
                                 </Grid>
