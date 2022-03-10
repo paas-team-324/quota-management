@@ -1,5 +1,6 @@
 import React from 'react';
 import { TextField, Grid, MenuItem, Box, CircularProgress, Divider } from '@material-ui/core';
+import { Autocomplete } from '@material-ui/lab';
 
 const DATA_TYPE_DESCRIPTIONS = {
     "int": "Whole non-negative number",
@@ -48,6 +49,7 @@ class QuotaParameter extends React.Component {
                         value={this.state.value}
                         onChange={event => this.validate(event.target.value)}
                         error={!this.state.valid}
+                        InputLabelProps={{ shrink: true }}
                         fullWidth
                     />
                 </Grid>
@@ -145,7 +147,7 @@ class Label extends React.Component {
     };
 
     validate(value) {
-
+        
         // set field text and check for validation errors
         this.setState({
             value: value,
@@ -159,15 +161,24 @@ class Label extends React.Component {
 
     render() {
         return (
-            <TextField
+            <Autocomplete
                 id={this.props.name}
                 name={this.props.name}
-                label={this.props.displayname}
-                value={this.state.value}
-                onChange={event => this.validate(event.target.value)}
-                error={!this.state.valid}
-                InputLabelProps={{ shrink: true }}
+                defaultValue={this.props.current}
+                onChange={ (event, value, reason) => this.validate(value)}
+                freeSolo
+                disableClearable
                 fullWidth
+                options={this.props.labels}
+                renderInput={(params) => 
+                    <TextField {...params}
+                        label={this.props.displayname}
+                        value={this.state.value}
+                        onChange={event => this.validate(event.target.value)}
+                        error={!this.state.valid}
+                        InputLabelProps={{ shrink: true }}
+                        fullWidth
+                    />}
             />
         )
     }
@@ -182,6 +193,7 @@ class Quota extends React.Component {
         this.state = {
             quota: null,
             scheme: null,
+            labels: null,
             validation: null,
             validation_errors: null
         };
@@ -239,14 +251,41 @@ class Quota extends React.Component {
 
                     if (ok) {
 
-                        this.setState({
-                            scheme: scheme,
-                            quota: quota,
-                            validation: validation,
-                            validation_errors: this.validate(quota, validation)
-                        }, function() {
-                            this.props.handleChange(this.state.quota, this.state.validation_errors === "")
-                        }.bind(this))
+                        let labels = null
+
+                        // prepare finish mounting function
+                        let finishMount = function() {
+
+                            this.setState({
+                                scheme: scheme,
+                                quota: quota,
+                                labels: labels,
+                                validation: validation,
+                                validation_errors: this.validate(quota, validation)
+                            }, function() {
+                                this.props.handleChange(this.state.quota, this.state.validation_errors === "")
+                            }.bind(this))
+
+                        }.bind(this)
+
+                        // fetch list of labels if labeling is enabled
+                        if (Object.keys(scheme["labels"]).length != 0) {
+
+                            this.props.request('GET', '/labels', {}, {}, function(response, ok) {
+
+                                labels = JSON.parse(response)
+
+                                if (ok) {
+                                    finishMount()
+                                } else {
+                                    this.props.handleError(labels["message"])
+                                }
+
+                            }.bind(this))
+
+                        } else {
+                            finishMount()
+                        }
 
                     } else {
                         this.props.handleError(validation["message"])
@@ -280,24 +319,31 @@ class Quota extends React.Component {
 
         return this.state.validation != null ? (
             <Grid item xs={12}>
-                <Divider style={{ marginBottom: '4%' }}/>
+
+                <Divider style={{ marginBottom: '4%' }} />
+
                 <Grid container spacing={3}>
 
-                    {/* project labels */}
-                    {Object.keys(this.state.scheme["labels"]).map(label =>
-                        <Grid item xs={6 / Object.keys(this.state.scheme["labels"]).length}>
-                            <Label
-                                name={label}
-                                displayname={this.state.scheme["labels"][label]}
-                                current={this.state.quota["labels"][label]}
-                                validation={this.state.validation["properties"]["labels"]["properties"][label]}
-                                validator={this.props.validator}
-                                edit={this.edit}
-                                ></Label>
-                        </Grid>
+                    {/* project labels (only render if labeling is enabled) */}
+                    {this.state.labels != null && (
+
+                        Object.keys(this.state.scheme["labels"]).map(label =>
+                            <Grid item xs={6 / Object.keys(this.state.scheme["labels"]).length}>
+                                <Label
+                                    name={label}
+                                    displayname={this.state.scheme["labels"][label]}
+                                    current={this.state.quota["labels"][label]}
+                                    labels={this.state.labels[label]}
+                                    validation={this.state.validation["properties"]["labels"]["properties"][label]}
+                                    validator={this.props.validator}
+                                    edit={this.edit}
+                                    ></Label>
+                            </Grid>
+                        )
+
                     )}
-                    <Grid item xs={6}></Grid>
-                
+                    {this.state.labels != null && ( <Grid item xs={6} /> )}
+                    
                     {/* project quota */}
                     {Object.keys(this.state.scheme["quota"]).map(quota_object_name =>
                         <Grid item xs={12 / Object.keys(this.state.scheme["quota"]).length}>
@@ -310,6 +356,7 @@ class Quota extends React.Component {
                                 current={this.state.quota["quota"][quota_object_name]}></ResourceQuota>
                         </Grid>
                     )}
+
                 </Grid>
             </Grid>
         ) : (
