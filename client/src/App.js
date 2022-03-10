@@ -88,7 +88,7 @@ class App extends React.Component {
 				callback(xhr_request.responseText, (Math.floor(xhr_request.status / 100) === 2) )
 			}
 
-		}.bind(this)
+		}
 
 		xhr_request.send(JSON.stringify(data))
 	}

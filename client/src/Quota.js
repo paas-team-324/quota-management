@@ -71,6 +71,7 @@ class QuotaParameter extends React.Component {
                                 })
                             }}
                             inputProps={{ style: { textAlign: "center" } }}
+                            // eslint-disable-next-line
                             InputProps={{
                                 readOnly: !Array.isArray(this.state.units),
                             }}
