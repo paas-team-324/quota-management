@@ -1,14 +1,14 @@
 import React from 'react';
 import UpdateQuota from './UpdateQuota';
 import NewProject from './NewProject';
-import { TabContext, TabPanel, TabList } from '@material-ui/lab';
-import { Paper, Tab } from '@material-ui/core';
-import EditIcon from '@material-ui/icons/Edit';
-import AddIcon from '@material-ui/icons/Add';
+import { TabContext, TabPanel, TabList } from '@mui/lab';
+import { Paper, Tab } from '@mui/material';
+import EditIcon from '@mui/icons-material/Edit';
+import AddIcon from '@mui/icons-material/Add';
 
 // jsonschema validator
 let Validator = require('jsonschema').Validator
-const validator = new Validator
+const validator = new Validator()
 
 class Cluster extends React.Component {
 

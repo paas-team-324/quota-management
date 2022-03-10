@@ -2,10 +2,10 @@ import React from 'react';
 import './App.css';
 import Auth from './Auth';
 import Cluster from './Cluster';
-import { Container, Toolbar, AppBar, Typography, Grid, Button, Dialog, DialogTitle, List, ListItem, ListItemText } from '@material-ui/core';
-import { createMuiTheme, ThemeProvider } from '@material-ui/core';
-import { Alert, AlertTitle } from '@material-ui/lab';
-import ListIcon from '@material-ui/icons/List';
+import { Container, Toolbar, AppBar, Typography, Grid, Button, Dialog, DialogTitle, List, ListItem, ListItemText } from '@mui/material';
+import { createMuiTheme, ThemeProvider } from '@mui/material';
+import { Alert, AlertTitle } from '@mui/lab';
+import ListIcon from '@mui/icons-material/List';
 
 // true - production color theme, false - dev color theme
 const colorThemes = {
@@ -48,7 +48,7 @@ class App extends React.Component {
 			if (ok) {
 
 				// make sure there are any clusters
-				if (clusters.length == 0) {
+				if (clusters.length === 0) {
 					this.setState({
 						error: "There are no available clusters"
 					})
@@ -84,8 +84,8 @@ class App extends React.Component {
 		// API response callback
 		xhr_request.onreadystatechange = function() {
 
-			if (xhr_request.readyState == XMLHttpRequest.DONE) {
-				callback(xhr_request.responseText, (Math.floor(xhr_request.status / 100) == 2) )
+			if (xhr_request.readyState === XMLHttpRequest.DONE) {
+				callback(xhr_request.responseText, (Math.floor(xhr_request.status / 100) === 2) )
 			}
 
 		}.bind(this)

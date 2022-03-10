@@ -1,5 +1,5 @@
 import React from 'react';
-import { Typography } from '@material-ui/core';
+import { Typography } from '@mui/material';
 
 class Auth extends React.Component {
 
@@ -28,10 +28,10 @@ class Auth extends React.Component {
             // API response callback
             xhr_request.onreadystatechange = function() {
 
-                if (xhr_request.readyState == XMLHttpRequest.DONE) {
+                if (xhr_request.readyState === XMLHttpRequest.DONE) {
 
                     // finish authentication if username is valid
-                    if (xhr_request.status == 200) {
+                    if (xhr_request.status === 200) {
 
                         // push root state without query params in order to hide them
                         window.history.replaceState({}, null, "/")

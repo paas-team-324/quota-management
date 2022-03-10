@@ -1,6 +1,6 @@
 import React from 'react';
-import { TextField, Grid, MenuItem, Box, CircularProgress, Divider } from '@material-ui/core';
-import { Autocomplete } from '@material-ui/lab';
+import { TextField, Grid, MenuItem, Box, CircularProgress, Divider } from '@mui/material';
+import { Autocomplete } from '@mui/lab';
 
 const DATA_TYPE_DESCRIPTIONS = {
     "int": "Whole non-negative number",
@@ -29,7 +29,7 @@ class QuotaParameter extends React.Component {
         // set field text and check for validation errors
         this.setState({
             value: value,
-            valid: this.props.validator.validate(value, this.props.validation).errors.length == 0
+            valid: this.props.validator.validate(value, this.props.validation).errors.length === 0
         })
 
         // edit quota object
@@ -50,6 +50,7 @@ class QuotaParameter extends React.Component {
                         onChange={event => this.validate(event.target.value)}
                         error={!this.state.valid}
                         InputLabelProps={{ shrink: true }}
+                        variant="standard"
                         fullWidth
                     />
                 </Grid>
@@ -73,6 +74,7 @@ class QuotaParameter extends React.Component {
                             InputProps={{
                                 readOnly: !Array.isArray(this.state.units),
                             }}
+                            variant="standard"
                             fullWidth
                         >
                         { Array.isArray(this.state.units) &&
@@ -151,7 +153,7 @@ class Label extends React.Component {
         // set field text and check for validation errors
         this.setState({
             value: value,
-            valid: this.props.validator.validate(value, this.props.validation).errors.length == 0
+            valid: this.props.validator.validate(value, this.props.validation).errors.length === 0
         })
 
         // edit quota object
@@ -177,6 +179,7 @@ class Label extends React.Component {
                         onChange={event => this.validate(event.target.value)}
                         error={!this.state.valid}
                         InputLabelProps={{ shrink: true }}
+                        variant="standard"
                         fullWidth
                     />}
             />
@@ -269,7 +272,7 @@ class Quota extends React.Component {
                         }.bind(this)
 
                         // fetch list of labels if labeling is enabled
-                        if (Object.keys(scheme["labels"]).length != 0) {
+                        if (Object.keys(scheme["labels"]).length !== 0) {
 
                             this.props.request('GET', '/labels', {}, {}, function(response, ok) {
 

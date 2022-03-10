@@ -1,9 +1,9 @@
 import React from 'react';
 import Quota from './Quota'
 
-import { Grid, Typography, Button, CircularProgress, TextField, InputAdornment, Tooltip } from '@material-ui/core';
-import { Alert, AlertTitle } from '@material-ui/lab';
-import HelpOutlineIcon from '@material-ui/icons/HelpOutline';
+import { Grid, Typography, Button, CircularProgress, TextField, InputAdornment, Tooltip } from '@mui/material';
+import { Alert, AlertTitle } from '@mui/lab';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 
 const create_button_idle = "Create"
 const create_button_working = "Creating..."
@@ -67,7 +67,7 @@ class NewProject extends React.Component {
 
         this.setState({
             [field]: name,
-            [field + "_valid"]: validation.errors.length == 0,
+            [field + "_valid"]: validation.errors.length === 0,
             [field + "_validation_errors"]: validation.errors.map((error) => "* " + error.message).join("\n")
         })
 
@@ -126,12 +126,12 @@ class NewProject extends React.Component {
                                         id="project_name" 
                                         label="Name" 
                                         variant="standard"
-                                        error={!this.state.project_name_valid && this.state.project_name.length != 0}
+                                        error={!this.state.project_name_valid && this.state.project_name.length !== 0}
                                         value={this.state.project_name}
                                         onChange={(event) => {
                                             this.set_name(event.target.value, "project_name", this.state.project_name_validation)
                                         }}
-                                        InputProps={ !this.state.project_name_valid && this.state.project_name.length != 0 ? {
+                                        InputProps={ !this.state.project_name_valid && this.state.project_name.length !== 0 ? {
                                             endAdornment: (
                                                 <InputAdornment position="end">
                                                     <Tooltip title={this.state.project_name_validation_errors}>
@@ -150,12 +150,12 @@ class NewProject extends React.Component {
                                         id="admin_name" 
                                         label="Admin" 
                                         variant="standard"
-                                        error={!this.state.admin_name_valid && this.state.admin_name.length != 0}
+                                        error={!this.state.admin_name_valid && this.state.admin_name.length !== 0}
                                         value={this.state.admin_name}
                                         onChange={(event) => {
                                             this.set_name(event.target.value, "admin_name", this.state.admin_name_validation)
                                         }}
-                                        InputProps={ !this.state.admin_name_valid && this.state.admin_name.length != 0 ? {
+                                        InputProps={ !this.state.admin_name_valid && this.state.admin_name.length !== 0 ? {
                                             endAdornment: (
                                                 <InputAdornment position="end">
                                                     <Tooltip title={this.state.admin_name_validation_errors}>
