@@ -1,5 +1,5 @@
 import React from 'react';
-import { TextField, Grid, MenuItem, Box, CircularProgress, Divider } from '@mui/material';
+import { TextField, Grid, MenuItem, Box, CircularProgress, Divider, Typography } from '@mui/material';
 import { Autocomplete } from '@mui/lab';
 
 const DATA_TYPE_DESCRIPTIONS = {
@@ -324,7 +324,11 @@ class Quota extends React.Component {
         return this.state.validation != null ? (
             <Grid item xs={12}>
 
-                <Divider style={{ marginBottom: '4%' }} />
+                <Divider style={{ marginBottom: '2%' }}>
+                    <Typography variant="caption">
+                        Labels
+                    </Typography>
+                </Divider>
 
                 <Grid container spacing={3}>
 
@@ -332,7 +336,7 @@ class Quota extends React.Component {
                     {this.state.labels != null && (
 
                         Object.keys(this.state.scheme["labels"]).map(label =>
-                            <Grid item xs={6 / Object.keys(this.state.scheme["labels"]).length}>
+                            <Grid item xs={12 / Object.keys(this.state.scheme["quota"]).length / 2}>
                                 <Label
                                     name={label}
                                     displayname={this.state.scheme["labels"][label]}
@@ -346,8 +350,16 @@ class Quota extends React.Component {
                         )
 
                     )}
-                    {this.state.labels != null && ( <Grid item xs={6} /> )}
+                    {this.state.labels != null && ( <Grid item xs={ 12 - ((12 / Object.keys(this.state.scheme["quota"]).length / 2) * Object.keys(this.state.scheme["labels"]).length) } /> )}
                     
+                    <Grid item xs={12} style={{ marginBottom: '-2%' }}>
+                        <Divider>
+                            <Typography variant="caption">
+                                Quota
+                            </Typography>
+                        </Divider>
+                    </Grid>
+
                     {/* project quota */}
                     {Object.keys(this.state.scheme["quota"]).map(quota_object_name =>
                         <Grid item xs={12 / Object.keys(this.state.scheme["quota"]).length}>
