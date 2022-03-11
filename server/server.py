@@ -625,19 +625,21 @@ def patch_quota(user_scheme, project, username, dry_run=False):
     except jsonschema.ValidationError as error:
         abort(f"user provided scheme is invalid: {error.message}", 400)
 
-    # patch project namespace with labels
-    config.api_request( "PATCH",
-                        f"/api/v1/namespaces/{project}",
-                        json=\
-                        {
-                            "metadata": {
-                                "labels": user_scheme["labels"]
-                            }
-                        },
-                        contentType="application/strategic-merge-patch+json",
-                        dry_run=dry_run)
+    # patch project namespace with labels (if labeling is enabled)
+    if user_scheme["labels"]:
 
-    config.logger.info(f"user '{username}' has updated the labels for project '{project}' on cluster '{request_context.cluster}': '{user_scheme['labels']}")
+        config.api_request( "PATCH",
+                            f"/api/v1/namespaces/{project}",
+                            json=\
+                            {
+                                "metadata": {
+                                    "labels": user_scheme["labels"]
+                                }
+                            },
+                            contentType="application/strategic-merge-patch+json",
+                            dry_run=dry_run)
+
+        config.logger.info(f"user '{username}' has updated the labels for project '{project}' on cluster '{request_context.cluster}': '{user_scheme['labels']}")
 
     # fetch quota objects for given project
     quota_objects = get_quota(project)
