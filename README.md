@@ -13,7 +13,8 @@ OpenShift application for easy management of resources for projects located with
 - Full schema validation on client and server
 - Clear distinction between development and production clusters
 - Quota managers do not carry the RBAC permissions, the application itself performs the actions
-- Each request is logged accordingly
+- Each request is logged accordingly and can be persisted
+- Optional namespace labeling
 
 ## Deployment
 
@@ -41,22 +42,24 @@ Before creating the application manifest, configure its behavior to match your e
 Edit the resulting manifest using `vim quota-management.yaml` command. Objects of interest:
 
 - Group: users in this group are allowed to access the application, edit quota and create new projects. Add relevant users to the list (as they appear in the output of `oc get users`)
-- ConfigMap (quota-scheme): this scheme tells the application which ResourceQuota objects and which fields within them can be edited.
+- ConfigMap (quota-scheme): this scheme tells the application which ResourceQuota objects and which fields within them can be edited. It also allows for optional namespace labeling.
   Here is how this dictionary works:
 
-  - 1st level keys: ResourceQuota objects by that name that exist in the namespace
-    - 2nd level keys: fields that are present in `.spec.hard` of their ResourceQuota object
-        - __name__: display name for the current field
-        - __units__: allowed units (Mi, Gi, etc.) for the current field. Can be blank (pods, pvcs), quota unit (Memory, Storage, CPU), or a list of quota units to choose from
-        - __type__: data type for the current field (can only be "int" or "float")
+  - __labels__: dictionary of string:string key-value pairs where the key is the label key and value is display name for that label in UI. Leave the dictionary empty to disable the feature.
+  - __quota__: dictionary of string:object key-value pairs which work as described below:
+    - 1st level keys: ResourceQuota objects by that name that exist in the namespace
+      - 2nd level keys: fields that are present in `.spec.hard` of their ResourceQuota object
+          - __name__: display name for the current field
+          - __units__: allowed units (Mi, Gi, etc.) for the current field. Can be blank (pods, pvcs), quota unit (Memory, Storage, CPU), or a list of quota units to choose from
+          - __type__: data type for the current field (can only be "int" or "float")
 
-  Quota Management assumes that these objects and fields within them are defined in the default project request template of each managed cluster.
+  Quota Management assumes that `quota` objects and fields within them are defined in the default project request template of each managed cluster.
 
 - ConfigMap (ca-bundle): CA certificates that this application trusts
 - Secret: clusters that Quota Management can manage. Each key in the secret represents a cluster and value for each key must be a dictionary with the following fields:
 
   - __displayName__: display name for the cluster
-  - __api__: full API URL for the remote cluster (including "https://" and port)
+  - __api__: full API URL for the remote cluster ("https://api-host:port")
   - __production__: boolean which tells the application whether the cluster is production
   - __token__: bearer token used to perform management on remote cluster
 
@@ -68,6 +71,15 @@ Edit the resulting manifest using `vim quota-management.yaml` command. Objects o
 - Deployment/Service/Route: the application itself. Generally should not be of interest
 
 Now deploy the manifest: `oc create -f quota-management.yaml`
+
+### Persistent logging
+
+Quota Management can persist audit, debug and warning logs to a persistent volume. Here is how you can configure it:
+- Create an RWX PVC in the application namespace
+- Mount in to the pod by editing the deployment object
+- Set value for the `LOG_STORAGE` environment variable within the deployment object to the mount path
+
+Logs can be read by issuing the following command: `oc exec svc/quota-management -n quota-management -- logs`
 
 ## Development
 
