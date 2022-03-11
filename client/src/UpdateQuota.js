@@ -1,7 +1,7 @@
 import React from 'react';
 import Quota from './Quota'
-import { Alert, AlertTitle } from '@material-ui/lab';
-import { Grid, Typography, Select, Button, CircularProgress } from '@material-ui/core';
+import { Alert, AlertTitle } from '@mui/lab';
+import { Grid, Typography, Select, Button, CircularProgress } from '@mui/material';
 
 const update_button_idle = "Edit"
 const update_button_working = "Editing..."
@@ -32,7 +32,7 @@ class UpdateQuota extends React.Component {
     componentDidUpdate(prevProps) {
 
         // remount component on cluster change
-        if (this.props.cluster != prevProps.cluster) {
+        if (this.props.cluster !== prevProps.cluster) {
 
             this.setState({
                 init_loading: true,
@@ -87,7 +87,7 @@ class UpdateQuota extends React.Component {
 
             if (ok) {
 
-                if (responseJSON["projects"].length == 0) {
+                if (responseJSON["projects"].length === 0) {
 
                     this.setState({
                         init_error: "There are no managed projects that exist in this cluster"
@@ -154,6 +154,7 @@ class UpdateQuota extends React.Component {
                                             <span style={{ marginRight: "1%" }}>Project:</span>
                                             <Select
                                                 native
+                                                variant="standard"
                                                 value={this.state.project}
                                                 onChange={(event) => {
                                                     this.changeProject(event.target.value)
