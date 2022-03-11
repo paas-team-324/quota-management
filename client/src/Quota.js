@@ -324,11 +324,16 @@ class Quota extends React.Component {
         return this.state.validation != null ? (
             <Grid item xs={12}>
 
-                <Divider style={{ marginBottom: '2%' }}>
-                    <Typography variant="caption">
-                        Labels
-                    </Typography>
-                </Divider>
+                {/* project quota divider (only render if labeling is enabled) */}
+                {this.state.labels != null && (
+
+                    <Divider style={{ marginBottom: '2%' }}>
+                        <Typography variant="caption">
+                            Labels
+                        </Typography>
+                    </Divider>
+
+                )}
 
                 <Grid container spacing={3}>
 
@@ -352,6 +357,7 @@ class Quota extends React.Component {
                     )}
                     {this.state.labels != null && ( <Grid item xs={ 12 - ((12 / Object.keys(this.state.scheme["quota"]).length / 2) * Object.keys(this.state.scheme["labels"]).length) } /> )}
                     
+                    {/* project quota divider */}
                     <Grid item xs={12} style={{ marginBottom: '-2%' }}>
                         <Divider>
                             <Typography variant="caption">
