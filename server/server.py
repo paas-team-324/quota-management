@@ -639,7 +639,7 @@ def patch_quota(user_scheme, project, username, dry_run=False):
                             contentType="application/strategic-merge-patch+json",
                             dry_run=dry_run)
 
-        config.logger.info(f"user '{username}' has updated the labels for project '{project}' on cluster '{request_context.cluster}': '{user_scheme['labels']}")
+        config.logger.info(f"user '{username}' has updated the labels for project '{project}' on cluster '{request_context.cluster}': '{user_scheme['labels']}'")
 
     # fetch quota objects for given project
     quota_objects = get_quota(project)
