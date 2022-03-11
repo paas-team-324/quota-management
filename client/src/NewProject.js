@@ -36,6 +36,22 @@ class NewProject extends React.Component {
         this.set_name = this.set_name.bind(this)
     }
 
+    componentDidUpdate(prevProps) {
+
+        // remount component on cluster change
+        if (this.props.cluster !== prevProps.cluster) {
+
+            this.setState({
+                admin_name_validation: null,
+                project_name_validation: null,
+                error: null
+            }, function() {
+                this.componentDidMount()
+            }.bind(this))
+
+        }
+    }
+
     create() {
 
         this.setState({
