@@ -4,7 +4,7 @@
 # * Red Hat CRC is running
 # * able to push to internal registry (make get-registry-certificate)
 
-VERSION ?= 1.3
+VERSION ?= 1.4
 IMAGE ?= default-route-openshift-image-registry.apps-crc.testing/quota-management/quota-management
 
 get-registry-certificate:
