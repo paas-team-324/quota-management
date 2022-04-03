@@ -123,7 +123,7 @@ class QuotaLogFileHandler(RotatingFileHandler):
 
 class Config:
 
-    class _Schemas:
+    class Schema:
 
             # list of valid quantity units
             _valid_units = [ "", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "n", "u", "m", "k", "M", "G", "T", "P", "E" ]
@@ -133,11 +133,12 @@ class Config:
             {
                 "type": "object",
                 "additionalProperties": False,
-                "required": [ "displayName", "api", "production", "token" ],
+                "required": [ "displayName", "api", "production", "scheme", "token" ],
                 "properties": {
                     "displayName": { "type": "string" },
                     "api": { "type": "string" },
                     "production": { "type": "boolean" },
+                    "scheme": { "type": "string" },
                     "token": { "type": "string" }
                 }
             }
@@ -216,10 +217,10 @@ class Config:
                 }
             }
 
-            def __init__(self, name, quota):
+            def __init__(self, name, quota, quota_name):
 
                 # schema logger
-                schema_logger = get_logger(f"{name}-schema")
+                schema_logger = get_logger(f"{name}-{quota_name}-schema")
 
                 try:
 
@@ -288,7 +289,7 @@ class Config:
                         }
 
                 # combine schemas into a single user input validation schema
-                self.quota = \
+                self.quota_schema = \
                 {
                     "type": "object",
                     "additionalProperties": False,
@@ -298,6 +299,9 @@ class Config:
                         "quota": quota_schema
                     }
                 }
+
+                # store original quota scheme
+                self.quota = quota
 
                 schema_logger.info("user quota scheme generated")
 
@@ -318,7 +322,7 @@ class Config:
         try:
             self.name = name
             self.oauth_client_id = f'system:serviceaccount:{os.environ["SERVICEACCOUNT_NAMESPACE"]}:{os.environ["SERVICEACCOUNT_NAME"]}'
-            self.quota_scheme_path = os.environ["QUOTA_SCHEME_FILE"]
+            self.quota_schemes_dir = os.environ["QUOTA_SCHEMES_DIR"]
             self.clusters_dir = os.environ["CLUSTERS_DIR"]
             self.quota_managers_group = os.environ["QUOTA_MANAGERS_GROUP"]
             self.insecure_requests = os.environ["INSECURE_REQUESTS"]
@@ -327,18 +331,28 @@ class Config:
 
         config_logger.info("environment variables parsed")
 
-        # load quota scheme
-        try:
-            with open(self.quota_scheme_path, 'r') as quota_scheme_file:
-                self.quota_scheme = json.loads(quota_scheme_file.read())
+        # ensure schemes dir exists
+        if not os.path.exists(self.quota_schemes_dir):
+            config_logger.critical(f"schemes directory is not present at '{self.quota_schemes_dir}'")
 
-        except FileNotFoundError:
-            config_logger.critical(f"quota scheme file not found at '{self.quota_scheme_path}'")
-        except json.JSONDecodeError as error:
-            config_logger.critical(f"could not parse quota scheme JSON file at '{self.quota_scheme_path}': {error}")
+        # parse schemes
+        self.schemes = {}
+        for scheme in os.listdir(self.quota_schemes_dir):
 
-        # generate schemas object
-        self.schemas = self._Schemas(config_logger.name, self.quota_scheme)
+            # ignore hidden files
+            if not scheme.startswith("."):
+
+                try:
+                    with open(os.path.join(self.quota_schemes_dir, scheme)) as scheme_file:
+                        
+                        # read, validate and store
+                        scheme_json = json.loads(scheme_file.read())
+                        self.schemes[scheme] = self.Schema(config_logger.name, scheme_json, scheme)
+
+                except json.JSONDecodeError as error:
+                    config_logger.critical(f"could not parse '{scheme}' scheme file: {error}")
+
+        config_logger.info(f"{len(self.schemes)} schemes registered")
 
         # ensure clusters dir exists
         if not os.path.exists(self.clusters_dir):
@@ -354,15 +368,25 @@ class Config:
                 try:
                     with open(os.path.join(self.clusters_dir, cluster)) as cluster_file:
                         
-                        # read, validate and store
+                        # read, validate
                         cluster_json = json.loads(cluster_file.read())
-                        jsonschema.validate(instance=cluster_json, schema=self.schemas.cluster_file)
+                        jsonschema.validate(instance=cluster_json, schema=self.Schema.cluster_file)
+
+                        # make sure requested scheme is present
+                        if cluster_json["scheme"] not in list(self.schemes.keys()):
+                            config_logger.critical(f"'{cluster}' cluster file: '{cluster_json['scheme']}' scheme is not one of: {list(self.schemes.keys())}")
+
+                        # store cluster
                         self.clusters[cluster] = cluster_json
 
                 except json.JSONDecodeError as error:
                     config_logger.critical(f"could not parse '{cluster}' cluster file: {error}")
                 except jsonschema.ValidationError as error:
                     config_logger.critical(f"'{cluster}' cluster file does not conform to schema: {error}")
+
+        # make sure there is at least one cluster provided
+        if len(self.clusters) < 1:
+            config_logger.critical(f"no clusters were provided")
 
         config_logger.info(f"{len(self.clusters)} clusters registered")
 
@@ -517,14 +541,14 @@ def get_label_list():
                                     "/api/v1/namespaces")
 
     # init return value
-    labels = { label:[] for label in config.quota_scheme["labels"].keys() }
+    labels = { label:[] for label in request_context.cluster_quota_scheme["labels"].keys() }
 
     for namespace in response.json()["items"]:
         
         # filter infra projects
         if not re.match(INFRA_PROJECTS_REGEX, namespace["metadata"]["name"]):
 
-            for label in config.quota_scheme["labels"].keys():
+            for label in request_context.cluster_quota_scheme["labels"].keys():
 
                 # get label value from current namespace
                 label_value = namespace["metadata"].get("labels", {}).get(label, "")
@@ -558,9 +582,10 @@ def check_authorization():
     cluster = flask.request.args["cluster"]
     validate_cluster(cluster)
 
-    # add quota manager's username and cluster to current request context
+    # add quota manager's username, cluster and cluster quota scheme shortcut to current request context
     request_context.username = username
     request_context.cluster = cluster
+    request_context.cluster_quota_scheme = config.schemes[config.clusters[cluster]["scheme"]].quota
 
 @app.after_request
 def after_request(response):
@@ -615,13 +640,13 @@ def get_labels(project):
     namespace = config.api_request( "GET",
                                     f"/api/v1/namespaces/{project}").json()
 
-    return { label:namespace["metadata"].get("labels", {}).get(label, "") for label in config.quota_scheme["labels"].keys() }
+    return { label:namespace["metadata"].get("labels", {}).get(label, "") for label in request_context.cluster_quota_scheme["labels"].keys() }
 
 def patch_quota(user_scheme, project, username, dry_run=False):
 
     # validate user quota scheme
     try:
-        jsonschema.validate(instance=user_scheme, schema=config.schemas.quota)
+        jsonschema.validate(instance=user_scheme, schema=config.schemes[config.clusters[request_context.cluster]["scheme"]].quota_schema)
     except jsonschema.ValidationError as error:
         abort(f"user provided scheme is invalid: {error.message}", 400)
 
@@ -647,7 +672,7 @@ def patch_quota(user_scheme, project, username, dry_run=False):
     patches = []
         
     # iterate quota objects
-    for quota_object_name in config.quota_scheme["quota"].keys():
+    for quota_object_name in request_context.cluster_quota_scheme["quota"].keys():
 
         parameters = {}
 
@@ -655,7 +680,7 @@ def patch_quota(user_scheme, project, username, dry_run=False):
         quota_used = quota_objects[quota_object_name]['status']['used']
 
         # iterate quota parameters
-        for quota_parameter_name in config.quota_scheme["quota"][quota_object_name].keys():
+        for quota_parameter_name in request_context.cluster_quota_scheme["quota"][quota_object_name].keys():
 
             # parameter might not exist in 'used' fields which might be a sign of misconfiguration of project template quota or quota scheme
             if quota_parameter_name in quota_used:
@@ -670,7 +695,7 @@ def patch_quota(user_scheme, project, username, dry_run=False):
 
             # check if new quota value is smaller than currently used
             if parse_quantity(new_value).compare(used_value_decimal) == -1:
-                abort(f"new '{ config.quota_scheme['quota'][quota_object_name][quota_parameter_name]['name']}' quota value is smaller than currently used - new: '{new_value}', used: '{normalize_decimal(used_value_decimal)}'", 400)
+                abort(f"new '{ request_context.cluster_quota_scheme['quota'][quota_object_name][quota_parameter_name]['name']}' quota value is smaller than currently used - new: '{new_value}', used: '{normalize_decimal(used_value_decimal)}'", 400)
 
             # append parameter
             parameters[quota_parameter_name] = new_value
@@ -716,15 +741,15 @@ def r_get_env():
 
 @app.route("/validation/project", methods=["GET"])
 def r_get_validation_project():
-    return flask.jsonify(config.schemas.namespace)
+    return flask.jsonify(config.Schema.namespace)
 
 @app.route("/validation/username", methods=["GET"])
 def r_get_validation_username():
-    return flask.jsonify(config.schemas.username)
+    return flask.jsonify(config.Schema.username)
 
 @app.route("/validation/scheme", methods=["GET"])
 def r_get_validation_quota():
-    return flask.jsonify(config.schemas.quota)
+    return flask.jsonify(config.schemes[config.clusters[request_context.cluster]["scheme"]].quota_schema)
 
 @app.route("/username", methods=["GET"])
 @do_not_authenticate
@@ -762,8 +787,8 @@ def r_post_projects():
 
     # ensure admin username and namespace name are valid
     try:
-        jsonschema.validate(instance=flask.request.args["admin"], schema=config.schemas.username)
-        jsonschema.validate(instance=flask.request.args["project"], schema=config.schemas.namespace)
+        jsonschema.validate(instance=flask.request.args["admin"], schema=config.Schema.username)
+        jsonschema.validate(instance=flask.request.args["project"], schema=config.Schema.namespace)
     except jsonschema.ValidationError as error:
         abort(f"'{error.instance}' is invalid: {error.message}", 400)
 
@@ -824,7 +849,7 @@ def healthz():
 
 @app.route("/scheme", methods=["GET"])
 def r_get_scheme():
-    return flask.jsonify(config.quota_scheme)
+    return flask.jsonify(request_context.cluster_quota_scheme)
 
 @app.route("/quota", methods=["GET"])
 def r_get_quota():
@@ -847,7 +872,7 @@ def r_get_quota():
     }
 
     # iterate quota objects
-    for quota_object_name in config.quota_scheme["quota"].keys():
+    for quota_object_name in request_context.cluster_quota_scheme["quota"].keys():
 
         project_quota["quota"][quota_object_name] = {}
 
@@ -855,7 +880,7 @@ def r_get_quota():
         quota_object = quota_objects[quota_object_name]
 
         # iterate quota parameters
-        for quota_parameter_name in config.quota_scheme["quota"][quota_object_name].keys():
+        for quota_parameter_name in request_context.cluster_quota_scheme["quota"][quota_object_name].keys():
 
             # get current value
             try:
@@ -864,7 +889,7 @@ def r_get_quota():
                 abort(f"quota parameter '{quota_parameter_name}' is not defined in '{quota_object_name}' resource quota in project '{flask.request.args['project']}'", 502)
 
             # get desired units
-            config_units = config.quota_scheme["quota"][quota_object_name][quota_parameter_name]["units"]
+            config_units = request_context.cluster_quota_scheme["quota"][quota_object_name][quota_parameter_name]["units"]
             units = config_units[0] if isinstance(config_units, list) else config_units
 
             # convert to desired quantity based on units

@@ -13,10 +13,10 @@ objects:
 - apiVersion: v1
   kind: ConfigMap
   metadata:
-    name: quota-scheme
+    name: quota-schemes
     namespace: ${NAMESPACE}
   data:
-    scheme.json: |
+    default: |
       {
           "labels": {
               "unit": "Unit",
@@ -72,6 +72,7 @@ objects:
             "displayName": "Local cluster",
             "api": "https://openshift.default.svc:443",
             "production": false,
+            "scheme": "default",
             "token": ""
         }
 - apiVersion: v1
@@ -144,8 +145,8 @@ objects:
               path: /healthz
               port: 5000
           env:
-          - name: QUOTA_SCHEME_FILE
-            value: "/app/scheme.json"
+          - name: QUOTA_SCHEMES_DIR
+            value: "/app/schemes"
           - name: CLUSTERS_DIR
             value: "/app/clusters"
           - name: QUOTA_MANAGERS_GROUP
@@ -163,9 +164,8 @@ objects:
               fieldRef:
                 fieldPath: metadata.namespace
           volumeMounts:
-          - name: scheme
-            mountPath: "/app/scheme.json"
-            subPath: "scheme.json"
+          - name: schemes
+            mountPath: "/app/schemes"
             readOnly: true
           - name: ca-bundle
             mountPath: "/usr/local/share/ca-certificates/extra/ca-bundle.crt"
@@ -176,9 +176,9 @@ objects:
             readOnly: true
           imagePullPolicy: "${PULL_POLICY}"
         volumes:
-        - name: scheme
+        - name: schemes
           configMap:
-            name: quota-scheme
+            name: quota-schemes
         - name: ca-bundle
           configMap:
             name: ca-bundle
