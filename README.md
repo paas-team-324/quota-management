@@ -42,7 +42,7 @@ Before creating the application manifest, configure its behavior to match your e
 Edit the resulting manifest using `vim quota-management.yaml` command. Objects of interest:
 
 - Group: users in this group are allowed to access the application, edit quota and create new projects. Add relevant users to the list (as they appear in the output of `oc get users`)
-- ConfigMap (quota-scheme): this scheme tells the application which ResourceQuota objects and which fields within them can be edited. It also allows for optional namespace labeling.
+- ConfigMap (quota-schemes): each scheme tells the application which ResourceQuota objects and which fields within them can be edited. It also allows for optional namespace labeling.
   Here is how this dictionary works:
 
   - __labels__: dictionary of string:string key-value pairs where the key is the label key and value is display name for that label in UI. Leave the dictionary empty to disable the feature.
@@ -61,6 +61,7 @@ Edit the resulting manifest using `vim quota-management.yaml` command. Objects o
   - __displayName__: display name for the cluster
   - __api__: full API URL for the remote cluster ("https://api-host:port")
   - __production__: boolean which tells the application whether the cluster is production
+  - __scheme__: name of the scheme to be used to manage quota on remote cluster
   - __token__: bearer token used to perform management on remote cluster
 
   In order to get the token, a service account with proper permissions must be created on that cluster. Run `oc create -f deploy/quota-management-serviceaccount.yaml` against the remote cluster to create it. Then retrieve the token using `oc sa get-token quota-manager -n default`.
