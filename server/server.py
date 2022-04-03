@@ -436,7 +436,7 @@ class Config:
                 "Accept": "application/json",
                 "Connection": "close"
             },
-            timeout=10,
+            timeout=60,
             verify=(False if self.insecure_requests else "/etc/ssl/certs/ca-certificates.crt"),
             json=json,
             params={ **params, **( { "dryRun": "All" } if dry_run else {} ) })
