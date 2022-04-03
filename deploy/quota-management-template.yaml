@@ -60,7 +60,7 @@ objects:
     name: ca-bundle
     namespace: ${NAMESPACE}
   data:
-    ca-bundle.pem: |
+    ca-bundle.crt: |
 - apiVersion: v1
   kind: Secret
   metadata:
@@ -168,8 +168,8 @@ objects:
             subPath: "scheme.json"
             readOnly: true
           - name: ca-bundle
-            mountPath: "/usr/local/share/ca-certificates/extra/ca-bundle.pem"
-            subPath: "ca-bundle.pem"
+            mountPath: "/usr/local/share/ca-certificates/extra/ca-bundle.crt"
+            subPath: "ca-bundle.crt"
             readOnly: true
           - name: clusters
             mountPath: "/app/clusters"
