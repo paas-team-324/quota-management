@@ -224,7 +224,7 @@ parameters:
   name: QUOTA_MANAGERS_GROUP
   required: true
 - description: Docker image to use
-  value: docker.io/paasteam324/quota-management:1.4
+  value: docker.io/paasteam324/quota-management:1.5
   name: IMAGE
   required: true
 - description: Route hostname to use
